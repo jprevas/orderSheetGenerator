@@ -23,6 +23,10 @@ ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 TEMPLATE_IMAGE_PATH = os.path.join(ASSETS_DIR, "template_preview.png")
 
 SIGNATURE_BLANK = "_" * 34
+HEIGHT_WEIGHT_TEXT = (
+    "PLEASE DOCUMENT PATIENT HEIGHT AND WEIGHT     "
+    "Height: ____________     Weight: ____________"
+)
 
 
 def _fit_lines(text, max_width, font_name, start_size, min_size=6.0, max_lines=2):
@@ -58,13 +62,14 @@ def _fit_lines(text, max_width, font_name, start_size, min_size=6.0, max_lines=2
 
 
 class OrderLine:
-    """One printable row: an order (with date/time) or the signature line."""
+    """One printable row: an order (with date/time), or an emphasized line
+    like the height/weight reminder or the signature line (bold text)."""
 
-    def __init__(self, text, date_str="", time_str="", is_signature=False):
+    def __init__(self, text, date_str="", time_str="", bold=False):
         self.text = text
         self.date_str = date_str
         self.time_str = time_str
-        self.is_signature = is_signature
+        self.bold = bold
 
 
 def build_pages(order_lines):
@@ -85,18 +90,24 @@ def generate_pdf(
     order_time_str,
     include_background=False,
     calibration=None,
+    needs_height_weight=False,
 ):
     """
     order_texts: list of plain-language order strings, already formatted
                  (e.g. "Acetaminophen 650 mg PO", "CT Head w/o Contrast -
                  Indication: r/o bleed"). The signature line is appended
                  automatically.
+    needs_height_weight: if True, a bold reminder line to document patient
+                 height/weight is inserted after the orders, before the
+                 signature line (used when a weight-based med was ordered).
     """
     cal = calibration or L.load_calibration()
 
     lines = [OrderLine(t, order_date_str, order_time_str) for t in order_texts]
+    if needs_height_weight:
+        lines.append(OrderLine(HEIGHT_WEIGHT_TEXT, order_date_str, order_time_str, bold=True))
     sig_text = "Signature: {}   {}".format(SIGNATURE_BLANK, physician_name or "")
-    lines.append(OrderLine(sig_text, "", "", is_signature=True))
+    lines.append(OrderLine(sig_text, "", "", bold=True))
 
     pages = build_pages(lines)
 
@@ -148,8 +159,8 @@ def _draw_order_rows(c, page_lines, cal):
             c.setFont(L.FONT_NAME, fsize)
             c.drawString(L.apply_x(L.COL_DATE_TIME_DIV + L.CELL_TEXT_PAD_X, cal), baseline, tlines[0])
 
-        # ORDERS column (bold label prefix for the signature line).
-        font = L.FONT_NAME_BOLD if line.is_signature else L.FONT_NAME
+        # ORDERS column (bold for the signature / height-weight reminder lines).
+        font = L.FONT_NAME_BOLD if line.bold else L.FONT_NAME
         fsize, olines = _fit_lines(line.text, orders_col_width, font, L.ORDER_FONT_SIZE, max_lines=2)
         c.setFont(font, fsize)
         ox = L.apply_x(L.COL_NOTED_ORDERS_DIV + L.CELL_TEXT_PAD_X, cal)

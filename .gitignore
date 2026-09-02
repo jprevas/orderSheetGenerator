@@ -6,3 +6,4 @@ dist/
 *.spec
 .idea/
 *.pdf
+data.json

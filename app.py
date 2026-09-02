@@ -10,29 +10,15 @@ Run with:   python3 app.py
 Package to a Windows .exe with PyInstaller -- see README.md.
 """
 
-import os
 import platform
-import subprocess
-import sys
 import tkinter as tk
 from datetime import datetime
-from tkinter import ttk, filedialog, messagebox
+from tkinter import ttk, messagebox
 
 import data
 import layout as L
 import pdf_gen
-
-
-def open_file(path):
-    try:
-        if platform.system() == "Darwin":
-            subprocess.run(["open", path], check=False)
-        elif platform.system() == "Windows":
-            os.startfile(path)  # noqa: F821 (Windows only)
-        else:
-            subprocess.run(["xdg-open", path], check=False)
-    except Exception:
-        pass
+import printing
 
 
 class ScrollableFrame(ttk.Frame):
@@ -111,16 +97,14 @@ class CalibrationDialog(tk.Toplevel):
         }
 
     def print_test(self):
-        path = filedialog.asksaveasfilename(
-            title="Save calibration test page",
-            defaultextension=".pdf",
-            initialfile="calibration_test.pdf",
-            filetypes=[("PDF", "*.pdf")],
-        )
-        if not path:
+        path = printing.new_temp_pdf_path()
+        try:
+            pdf_gen.generate_calibration_test_page(path, self._current_cal())
+        except Exception as exc:  # noqa: BLE001
+            printing.discard(path)
+            messagebox.showerror("Error generating test page", str(exc))
             return
-        pdf_gen.generate_calibration_test_page(path, self._current_cal())
-        open_file(path)
+        printing.open_in_viewer(path)
 
     def save(self):
         L.save_calibration(self._current_cal())
@@ -135,8 +119,19 @@ class CalibrationDialog(tk.Toplevel):
 class EDOrderApp(tk.Tk):
     def __init__(self):
         super().__init__()
+        printing.cleanup_orphans()
+
         self.title("ED Physician Order Sheet Generator")
         self.geometry("980x760")
+
+        if data.LOAD_ERROR:
+            self.after(200, lambda: messagebox.showwarning(
+                "Order list file problem",
+                "{}\n\nUsing the built-in default order lists instead. Fix or delete "
+                "data.json next to the app and restart to pick up your custom lists.".format(
+                    data.LOAD_ERROR
+                ),
+            ))
 
         self._build_patient_bar()
 
@@ -227,7 +222,8 @@ class EDOrderApp(tk.Tk):
 
             var = tk.BooleanVar(value=False)
             ttk.Checkbutton(row, variable=var, width=4).pack(side="left")
-            ttk.Label(row, text=med["name"], width=32).pack(side="left")
+            name_text = med["name"] + (" (wt-based)" if med.get("requires_weight") else "")
+            ttk.Label(row, text=name_text, width=32).pack(side="left")
 
             dose_var = tk.StringVar(value=med.get("default_dose", ""))
             ttk.Entry(row, textvariable=dose_var, width=12).pack(side="left", padx=2)
@@ -237,7 +233,7 @@ class EDOrderApp(tk.Tk):
                 row, textvariable=route_var, values=data.COMMON_ROUTES, width=8
             ).pack(side="left", padx=2)
 
-            self.med_rows.append((med["name"], var, dose_var, route_var))
+            self.med_rows.append((med, var, dose_var, route_var))
 
     # -- Imaging tab ------------------------------------------------------------
     def _build_imaging_tab(self):
@@ -391,19 +387,22 @@ class EDOrderApp(tk.Tk):
         bar = ttk.Frame(self)
         bar.pack(fill="x", padx=8, pady=10)
 
-        self.preview_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(
+        ttk.Label(
             bar,
-            text="Preview mode (overlay on scanned form image — for on-screen checking only; "
-                 "uncheck before printing on the real paper form)",
-            variable=self.preview_var,
+            text="Nothing is saved — orders go straight to the print dialog and the "
+                 "temporary file is deleted right after.",
+            foreground="#555555",
         ).pack(side="left", padx=(0, 20))
 
         ttk.Button(bar, text="Print Calibration...", command=self._open_calibration).pack(side="right", padx=4)
-        ttk.Button(bar, text="Generate PDF", command=self._generate).pack(side="right", padx=4)
+        ttk.Button(bar, text="Print Order Sheet", command=self._print_order_sheet).pack(side="right", padx=4)
+        ttk.Button(bar, text="Preview on Screen...", command=self._preview_order_sheet).pack(side="right", padx=4)
 
     def _open_calibration(self):
         CalibrationDialog(self)
+
+    def _needs_height_weight(self):
+        return any(med.get("requires_weight") and var.get() for med, var, _, _ in self.med_rows)
 
     def _collect_order_texts(self):
         texts = []
@@ -412,9 +411,9 @@ class EDOrderApp(tk.Tk):
             if var.get():
                 texts.append(lab_name)
 
-        for name, var, dose_var, route_var in self.med_rows:
+        for med, var, dose_var, route_var in self.med_rows:
             if var.get():
-                parts = [name]
+                parts = [med["name"]]
                 dose = dose_var.get().strip()
                 route = route_var.get().strip()
                 if dose:
@@ -437,7 +436,9 @@ class EDOrderApp(tk.Tk):
 
         return texts
 
-    def _generate(self):
+    def _gather_and_validate(self):
+        """Returns a dict of patient/order info, or None if the user should
+        not proceed (validation failed or they cancelled a confirmation)."""
         patient_name = self.patient_name_var.get().strip()
         csn = self.csn_var.get().strip()
         physician = self.physician_var.get().strip()
@@ -445,55 +446,79 @@ class EDOrderApp(tk.Tk):
         if not patient_name or not csn:
             if not messagebox.askyesno(
                 "Missing patient info",
-                "Patient Name and/or CSN is blank. Generate the PDF anyway?",
+                "Patient Name and/or CSN is blank. Continue anyway?",
             ):
-                return
+                return None
 
         order_texts = self._collect_order_texts()
         if not order_texts:
             messagebox.showwarning("No orders selected", "Check off at least one order first.")
-            return
+            return None
 
         max_lines = L.NUM_ROWS * 20  # sanity ceiling, not a real limit (pagination handles overflow)
         if len(order_texts) > max_lines:
             messagebox.showerror("Too many orders", "That's a lot of orders. Trim the list and try again.")
-            return
+            return None
 
-        default_name = "orders_{}_{}.pdf".format(
-            (patient_name or "patient").replace(" ", "_"), csn or "noCSN"
-        )
-        path = filedialog.asksaveasfilename(
-            title="Save order sheet PDF",
-            defaultextension=".pdf",
-            initialfile=default_name,
-            filetypes=[("PDF", "*.pdf")],
-        )
-        if not path:
-            return
+        return {
+            "patient_name": patient_name,
+            "csn": csn,
+            "physician": physician,
+            "order_texts": order_texts,
+        }
 
+    def _build_temp_pdf(self, include_background):
+        """Generates a PDF to a private temp file and returns its path, or
+        None if validation failed or generation errored (temp file, if any,
+        is discarded immediately in that case)."""
+        info = self._gather_and_validate()
+        if info is None:
+            return None
+
+        path = printing.new_temp_pdf_path()
         try:
             pdf_gen.generate_pdf(
                 path,
-                patient_name=patient_name,
-                csn=csn,
-                physician_name=physician,
-                order_texts=order_texts,
+                patient_name=info["patient_name"],
+                csn=info["csn"],
+                physician_name=info["physician"],
+                order_texts=info["order_texts"],
                 order_date_str=self.order_date_var.get().strip(),
                 order_time_str=self.order_time_var.get().strip(),
-                include_background=self.preview_var.get(),
+                include_background=include_background,
+                needs_height_weight=self._needs_height_weight(),
             )
         except Exception as exc:  # noqa: BLE001
+            printing.discard(path)
             messagebox.showerror("Error generating PDF", str(exc))
+            return None
+        return path
+
+    def _print_order_sheet(self):
+        path = self._build_temp_pdf(include_background=False)
+        if not path:
             return
 
-        n_pages = -(-len(order_texts) // L.NUM_ROWS) or 1
-        if messagebox.askyesno(
-            "PDF generated",
-            "Saved to:\n{}\n\n({} page{}). Open it now?".format(
-                path, n_pages, "s" if n_pages != 1 else ""
-            ),
-        ):
-            open_file(path)
+        status = printing.print_order_sheet(path)
+
+        if status == "printed":
+            messagebox.showinfo("Sent to printer", "The order sheet was sent to the printer. Nothing was saved.")
+        elif status == "cancelled":
+            pass  # user cancelled the print dialog -- nothing printed, nothing to say
+        else:  # "opened": fallback viewer (non-Windows, or native print path unavailable)
+            shortcut = "Cmd+P" if platform.system() == "Darwin" else "Ctrl+P"
+            messagebox.showinfo(
+                "Ready to print",
+                "The order sheet opened in your PDF viewer.\n\n"
+                "Press {} there to print it. Nothing is saved -- the temporary "
+                "file is deleted automatically in a few minutes.".format(shortcut),
+            )
+
+    def _preview_order_sheet(self):
+        path = self._build_temp_pdf(include_background=True)
+        if not path:
+            return
+        printing.open_in_viewer(path)
 
 
 def main():

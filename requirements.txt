@@ -1,2 +1,8 @@
 reportlab>=4.0
 pillow>=10.0
+
+# Windows-only: drive the native Print dialog directly (windows_print.py).
+# Skipped automatically on macOS/Linux -- those fall back to opening the
+# PDF in the default viewer and printing with Cmd+P/Ctrl+P instead.
+pywin32>=306; sys_platform == "win32"
+pymupdf>=1.24; sys_platform == "win32"
