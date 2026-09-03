@@ -1,25 +1,3 @@
-"""
-Generates a print-ready PDF that overlays patient info, orders, and a
-signature line directly onto the pre-printed "Physician Orders" paper
-form, at the coordinates measured in layout.py.
-
-Two render modes:
-  - Final (include_background=False): only the dynamic text is drawn.
-    This is what you print on the actual pre-printed hospital forms.
-  - Preview (include_background=True): the scanned form image is drawn
-    behind the text so you can eyeball alignment on screen (e.g. on a
-    Mac with no access to the paper stock) before printing for real.
-
-Pagination: orders are laid out one per row at a fixed font size; an order
-whose text doesn't fit the ORDERS column width wraps onto a second (and
-if needed third+) row, indented, with DATE/TIME left blank on those
-continuation rows. If the orders (plus a trailing signature line, and a
-height/weight reminder line if a weight-based medication landed on that
-page) don't fit in NUM_ROWS rows, a new page is started -- and every page
-gets its own signature line (and its own height/weight reminder, if a
-weight-based med's order is on that particular page).
-"""
-
 import os
 
 from reportlab.lib.pagesizes import letter

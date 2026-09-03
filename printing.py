@@ -1,32 +1,3 @@
-"""
-Printing without persistence.
-
-Order sheets contain patient name/CSN, so nothing is ever written to a
-user-chosen, permanent location (no "Save As" dialog). Instead each PDF is
-written to a private temp file, opened in the OS's default PDF viewer, and
-then deleted:
-  - immediately, if something fails before handoff
-  - a few minutes later otherwise, giving the viewer time to actually read
-    the file (and the user time to print it)
-  - on app exit, as a backstop for anything still pending
-  - on the next app startup, cleaning up anything orphaned by a crash
-
-IMPORTANT: we deliberately do NOT use OS "quick print" mechanisms (e.g. the
-Windows shell "print" verb, or sending a `print` AppleEvent to Preview on
-macOS) to jump straight to a print dialog. Both were tested and found to
-silently send the job straight to the default printer with no dialog and no
-chance to review -- exactly what this app must not do with a patient order
-sheet.
-
-On Windows, print_order_sheet() instead drives the real Win32 print dialog
-directly (see windows_print.py) -- a genuine printer/copies/properties
-picker where nothing is spooled unless the user clicks Print. Everywhere
-else (macOS/Linux, or if that path is unavailable for any reason), it falls
-back to opening the file in the default viewer and the user prints from
-there with Ctrl+P/Cmd+P -- still guaranteed to be the real OS dialog, since
-it's the exact same action a person would normally take.
-"""
-
 import atexit
 import glob
 import os

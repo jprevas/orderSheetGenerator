@@ -1,17 +1,5 @@
 """
 Reference data for common Emergency Department orders.
-
-The actual order lists live in an editable sidecar file, data.json,
-kept next to this script (or next to the compiled .exe when frozen with
-PyInstaller). That means the order sets can be edited on a deployed
-machine -- add/remove a lab, tweak a medication's default dose, add an
-imaging study -- without recompiling the .exe.
-
-On first run (no data.json present yet), one is created automatically
-from the DEFAULTS below, pre-populated with today's order sets, ready to
-be hand-edited afterward. If data.json is missing a key or fails to
-parse, this module falls back to DEFAULTS for that key (or all of them)
-and LOAD_ERROR is set so the app can warn the user instead of crashing.
 """
 
 import json
@@ -208,7 +196,6 @@ DEFAULT_IMAGING_MODALITIES = {
         "T-Spine",
         "L-Spine",
         "Orbit",
-        "Internal Auditory Canal (IAC)",
     ],
     "US": [
         "Abdominal (RUQ/Gallbladder)",
@@ -220,8 +207,6 @@ DEFAULT_IMAGING_MODALITIES = {
         "Soft Tissue",
         "Venous Doppler / DVT Study",
         "Testicular",
-        "Echocardiogram",
-        "FAST Exam",
     ],
 }
 

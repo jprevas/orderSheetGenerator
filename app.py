@@ -5,9 +5,6 @@ A small desktop app for checking off common Emergency Department orders
 and generating a PDF that prints directly into the boxes of the
 pre-printed "Physician Orders" paper form (see assets/template_preview.png
 for what that form looks like).
-
-Run with:   python3 app.py
-Package to a Windows .exe with PyInstaller -- see README.md.
 """
 
 import platform
