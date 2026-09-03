@@ -139,48 +139,6 @@ you're ready to print for real onto the hospital's pre-printed stock (this
 mode never draws the scanned form background — only your entries, positioned
 to land in the form's boxes).
 
-## Building a Windows .exe
-
-Do this step on a Windows machine (PyInstaller builds for the OS it runs
-on — you can't cross-build a .exe from macOS):
-
-```
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-pip install pyinstaller
-pyinstaller --onefile --windowed --name "ED Order Sheet" --add-data "assets;assets" app.py
-```
-
-The .exe will be in `dist\ED Order Sheet.exe`. The `--add-data` flag is
-required so the bundled `assets/template_preview.png` (used only for
-Preview mode) ships inside the .exe. `pywin32` and `PyMuPDF` (installed via
-`requirements.txt` on Windows) are what power the native print dialog in
-`windows_print.py` — PyInstaller bundles them automatically; no extra flags
-needed for those two.
-
-If you ever need to build on macOS instead, the equivalent command is:
-```
-pyinstaller --onefile --windowed --name "ED Order Sheet" --add-data "assets:template_preview.png:assets" app.py
-```
-(note the `:` separator instead of `;` on macOS/Linux) — but this produces
-a macOS app bundle, not a .exe.
-
-### Building the Data Editor .exe (separately)
-
-`data_editor.py` (see below) is built the same way, but on its own —
-deliberately never bundled into "ED Order Sheet.exe":
-
-```
-pyinstaller --onefile --windowed --name "ED Order Data Editor" data_editor.py
-```
-
-No `--add-data` and no `requirements.txt` install needed for this one — the
-editor only imports `data.py`, which has zero third-party dependencies, so
-it doesn't pull in `reportlab`/`pywin32`/`PyMuPDF` at all. (The GitHub
-Actions workflow already builds and uploads both `.exe`s as separate
-artifacts on every push.)
-
 ## Print calibration
 
 The coordinates in `layout.py` were measured directly from a high-resolution
