@@ -60,33 +60,38 @@ DEFAULT_LABS = [
 # default_dose: pre-filled suggestion (editable in the UI, may be blank)
 # default_route: pre-filled suggestion (editable in the UI)
 # default_frequency: pre-filled suggestion for the Frequency field (may be blank)
+# allow_prn: set true if this medication may be ordered PRN -- only then
+#   does its row's PRN checkbox (and PRN Reason field) become clickable.
+#   Omitted entries default to false (PRN checkbox stays disabled), since
+#   most scheduled/one-time meds (antibiotics, boluses, RSI drugs, etc.)
+#   aren't ordered PRN.
 # default_prn_reason: pre-filled suggestion for the PRN Reason field, used
-#   when the PRN box is checked (may be blank/omitted)
+#   when the PRN box is checked (only meaningful if allow_prn is true)
 # requires_weight: set true for weight-based dosing -- if any checked
 #   medication has this set, the generated order sheet adds a reminder
 #   line at the bottom to document patient height/weight. Omitted
 #   entries default to false.
 DEFAULT_MEDICATIONS = [
-    {"name": "Acetaminophen (Tylenol)", "default_dose": "650 mg", "default_route": "PO", "default_frequency": "Q6H", "default_prn_reason": "Pain/Fever"},
-    {"name": "Ibuprofen (Motrin)", "default_dose": "600 mg", "default_route": "PO", "default_frequency": "Q6H", "default_prn_reason": "Pain/Fever"},
-    {"name": "Ketorolac (Toradol)", "default_dose": "15 mg", "default_route": "IV", "default_prn_reason": "Pain"},
-    {"name": "Aspirin", "default_dose": "324 mg", "default_route": "PO"},
-    {"name": "Ondansetron (Zofran) ODT", "default_dose": "4 mg", "default_route": "PO", "default_prn_reason": "Nausea/Vomiting"},
-    {"name": "Ondansetron (Zofran)", "default_dose": "4 mg", "default_route": "IV", "default_prn_reason": "Nausea/Vomiting"},
-    {"name": "Metoclopramide (Reglan)", "default_dose": "10 mg", "default_route": "IV", "default_prn_reason": "Nausea/Vomiting"},
-    {"name": "Diphenhydramine (Benadryl)", "default_dose": "25 mg", "default_route": "IV", "default_prn_reason": "Itching/Allergic Reaction"},
-    {"name": "Famotidine (Pepcid)", "default_dose": "20 mg", "default_route": "IV"},
-    {"name": "Morphine", "default_dose": "4 mg", "default_route": "IV", "default_prn_reason": "Pain"},
-    {"name": "Fentanyl", "default_dose": "50 mcg", "default_route": "IV", "default_prn_reason": "Pain"},
-    {"name": "Lorazepam (Ativan)", "default_dose": "1 mg", "default_route": "IV", "default_prn_reason": "Anxiety/Agitation"},
-    {"name": "Naloxone (Narcan)", "default_dose": "0.4 mg", "default_route": "IV"},
-    {"name": "Epinephrine 1:1,000", "default_dose": "0.5 mg", "default_route": "IM"},
-    {"name": "Albuterol Nebulizer", "default_dose": "2.5 mg", "default_route": "Neb", "default_frequency": "Q4H", "default_prn_reason": "Shortness of Breath/Wheezing"},
-    {"name": "Ipratropium Nebulizer", "default_dose": "0.5 mg", "default_route": "Neb", "default_frequency": "Q6H"},
-    {"name": "Methylprednisolone (Solu-Medrol)", "default_dose": "125 mg", "default_route": "IV"},
-    {"name": "Dexamethasone", "default_dose": "10 mg", "default_route": "IV/PO"},
-    {"name": "Prednisone", "default_dose": "40 mg", "default_route": "PO"},
-    {"name": "Nitroglycerin SL", "default_dose": "0.4 mg", "default_route": "SL", "default_prn_reason": "Chest Pain"},
+    {"name": "Acetaminophen (Tylenol)", "default_dose": "650 mg", "default_route": "PO", "default_frequency": "Q6H", "allow_prn": True, "default_prn_reason": "Pain/Fever"},
+    {"name": "Ibuprofen (Motrin)", "default_dose": "600 mg", "default_route": "PO", "default_frequency": "Q6H", "allow_prn": True, "default_prn_reason": "Pain/Fever"},
+    {"name": "Ketorolac (Toradol)", "default_dose": "15 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Pain"},
+    {"name": "Aspirin", "default_dose": "324 mg", "default_route": "PO", "default_frequency": "Once"},
+    {"name": "Ondansetron (Zofran) ODT", "default_dose": "4 mg", "default_route": "PO", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Nausea/Vomiting"},
+    {"name": "Ondansetron (Zofran)", "default_dose": "4 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Nausea/Vomiting"},
+    {"name": "Metoclopramide (Reglan)", "default_dose": "10 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Nausea/Vomiting"},
+    {"name": "Diphenhydramine (Benadryl)", "default_dose": "25 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Itching/Allergic Reaction"},
+    {"name": "Famotidine (Pepcid)", "default_dose": "20 mg", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Morphine", "default_dose": "4 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Pain"},
+    {"name": "Fentanyl", "default_dose": "50 mcg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Pain"},
+    {"name": "Lorazepam (Ativan)", "default_dose": "1 mg", "default_route": "IV", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Anxiety/Agitation"},
+    {"name": "Naloxone (Narcan)", "default_dose": "0.4 mg", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Epinephrine 1:1,000", "default_dose": "0.5 mg", "default_route": "IM", "default_frequency": "Once"},
+    {"name": "Albuterol Nebulizer", "default_dose": "2.5 mg", "default_route": "Neb", "default_frequency": "Q4H", "allow_prn": True, "default_prn_reason": "Shortness of Breath/Wheezing"},
+    {"name": "Ipratropium Nebulizer", "default_dose": "0.5 mg", "default_route": "Neb", "default_frequency": "Q6H", "allow_prn": True},
+    {"name": "Methylprednisolone (Solu-Medrol)", "default_dose": "125 mg", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Dexamethasone", "default_dose": "10 mg", "default_route": "IV/PO", "default_frequency": "Once"},
+    {"name": "Prednisone", "default_dose": "40 mg", "default_route": "PO", "default_frequency": "Once"},
+    {"name": "Nitroglycerin SL", "default_dose": "0.4 mg", "default_route": "SL", "default_frequency": "Once", "allow_prn": True, "default_prn_reason": "Chest Pain"},
     {"name": "Ceftriaxone (Rocephin)", "default_dose": "1 g", "default_route": "IV", "default_frequency": "Q24H"},
     {"name": "Cefazolin (Ancef)", "default_dose": "1 g", "default_route": "IV", "default_frequency": "Q8H"},
     {"name": "Cefepime", "default_dose": "1 g", "default_route": "IV", "default_frequency": "Q8H"},
@@ -95,20 +100,20 @@ DEFAULT_MEDICATIONS = [
     {"name": "Piperacillin-Tazobactam (Zosyn)", "default_dose": "3.375 g", "default_route": "IV", "default_frequency": "Q6H"},
     {"name": "Azithromycin", "default_dose": "500 mg", "default_route": "PO", "default_frequency": "Q24H"},
     {"name": "Metronidazole (Flagyl)", "default_dose": "500 mg", "default_route": "PO", "default_frequency": "Q8H"},
-    {"name": "Normal Saline Bolus", "default_dose": "1 L", "default_route": "IV"},
-    {"name": "Lactated Ringers Bolus", "default_dose": "1 L", "default_route": "IV"},
-    {"name": "Dextrose 50%", "default_dose": "25 g", "default_route": "IV"},
-    {"name": "Insulin Regular for Hyperkalemia", "default_dose": "10", "default_route": "IV"},
-    {"name": "Insulin Aspart (Novolog)", "default_dose": "", "default_route": "SC"},
-    {"name": "Magnesium Sulfate", "default_dose": "2 g", "default_route": "IV"},
-    {"name": "Calcium Gluconate", "default_dose": "1 g", "default_route": "IV"},
-    {"name": "Sodium Bicarbonate", "default_dose": "1 amp", "default_route": "IV"},
-    {"name": "Activated Charcoal", "default_dose": "50 g", "default_route": "PO", "requires_weight": True},
-    {"name": "Tetanus/Tdap Booster", "default_dose": "0.5 mL", "default_route": "IM"},
-    {"name": "Ketamine", "default_dose": "", "default_route": "IV", "requires_weight": True},
-    {"name": "Etomidate", "default_dose": "", "default_route": "IV", "requires_weight": True},
-    {"name": "Rocuronium", "default_dose": "", "default_route": "IV", "requires_weight": True},
-    {"name": "Succinylcholine", "default_dose": "", "default_route": "IV", "requires_weight": True},
+    {"name": "Normal Saline Bolus", "default_dose": "1 L", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Lactated Ringers Bolus", "default_dose": "1 L", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Dextrose 50%", "default_dose": "25 g", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Insulin Regular for Hyperkalemia", "default_dose": "10", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Insulin Aspart (Novolog)", "default_dose": "", "default_route": "SC", "default_frequency": "Once"},
+    {"name": "Magnesium Sulfate", "default_dose": "2 g", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Calcium Gluconate", "default_dose": "1 g", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Sodium Bicarbonate", "default_dose": "1 amp", "default_route": "IV", "default_frequency": "Once"},
+    {"name": "Activated Charcoal", "default_dose": "50 g", "default_route": "PO", "default_frequency": "Once", "requires_weight": True},
+    {"name": "Tetanus/Tdap Booster", "default_dose": "0.5 mL", "default_route": "IM", "default_frequency": "Once"},
+    {"name": "Ketamine", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
+    {"name": "Etomidate", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
+    {"name": "Rocuronium", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
+    {"name": "Succinylcholine", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
 ]
 
 # Common routes offered in the Route dropdown (still freely editable).
@@ -126,6 +131,40 @@ DEFAULT_PRN_REASONS = [
     "Pain", "Pain/Fever", "Fever", "Nausea/Vomiting", "Anxiety/Agitation",
     "Itching/Allergic Reaction", "Insomnia", "Constipation",
     "Shortness of Breath/Wheezing", "Chest Pain", "Breakthrough Pain",
+]
+
+# Common titration frequencies offered in the Drips tab (still freely editable).
+DEFAULT_TITRATE_FREQUENCIES = [
+    "Q5min", "Q10min", "Q15min", "Q30min", "Q1H", "Q2H", "Per Protocol",
+]
+
+# Continuous IV drip/infusion medications, shown on their own "Drips" tab
+# since they need titration fields instead of a simple dose/route/frequency.
+# name: display name
+# default_initial_dose: pre-filled suggestion for the starting rate (may be blank)
+# default_titrate_by: pre-filled suggestion for how much to titrate by (may be blank)
+# default_titrate_frequency: pre-filled suggestion for how often to titrate (may be blank)
+# default_max_dose: pre-filled suggestion for the not-to-exceed rate (may be blank)
+# default_goal: pre-filled suggestion for the free-text titration goal (may be blank)
+# requires_weight: same meaning as on DEFAULT_MEDICATIONS -- weight-based
+#   (mcg/kg/min etc.) drips trigger the height/weight reminder line.
+# is_protocol: set true for a drip that follows a fixed, non-titrated,
+#   multi-phase regimen (e.g. Amiodarone's load-then-maintenance dosing)
+#   rather than a simple start/titrate-by/frequency/max/goal shape. When
+#   set, the Drips tab shows one free-text Protocol field pre-filled from
+#   default_protocol_text instead of the usual titration fields.
+# default_protocol_text: pre-filled suggestion for that free-text field
+#   (only meaningful when is_protocol is true; may be blank)
+DEFAULT_DRIPS = [
+    {"name": "Norepinephrine (Levophed) 8mg/250mL", "default_initial_dose": "4 mcg/min", "default_titrate_by": "1- 4 mcg/min", "default_titrate_frequency": "Q5min", "default_max_dose": "50 mcg/min", "default_goal": "MAP >= 65"},
+    {"name": "Epinephrine 5mg/250mL", "default_initial_dose": "2.5 mcg/min", "default_titrate_by": "2.5 mcg/min", "default_titrate_frequency": "Q5min", "default_max_dose": "20 mcg/min", "default_goal": "MAP >= 65", "requires_weight": True},
+    {"name": "Vasopressin 20 units/100 mL", "default_initial_dose": "0.03 units/min", "default_max_dose": "0.03 units/min", "default_goal": "MAP >= 65"},
+    {"name": "Dopamine", "default_initial_dose": "5 mcg/kg/min", "default_titrate_by": "2.5 mcg/kg/min", "default_titrate_frequency": "Q5-10min", "default_max_dose": "20 mcg/kg/min", "default_goal": "MAP >= 65", "requires_weight": True},
+    {"name": "Propofol 1000 mg/100mL", "default_initial_dose": "10mcg/kg/min", "default_titrate_by": "5 mcg/kg/min", "default_titrate_frequency": "Q5min", "default_max_dose": "50 mcg/kg/min", "default_goal": "RASS -2 to 0", "requires_weight": True},
+    {"name": "Nicardipine 25 mg/250 mL", "default_initial_dose": "5 mg/hr", "default_titrate_by": "2.5 mg/hr", "default_titrate_frequency": "Q15min", "default_max_dose": "15 mg/hr", "default_goal": "SBP < 140"},
+    {"name": "Diltiazem Infusion 125 mg/125 mL", "default_initial_dose": "5 mg/hr", "default_titrate_by": "5 mg/hr", "default_titrate_frequency": "Q60min", "default_max_dose": "15 mg/hr", "default_goal": "HR < 110"},
+    {"name": "Amiodarone (Drip)", "is_protocol": True, "default_protocol_text": "150 mg IV over 10 min, then 360 mg/200 mL 1 mg/min x 6h, then 540 mg/300 mL 0.5 mg/min x 18h (max 2.2 g/24h)"},
+    {"name": "Nitroglycerin (Drip)", "default_initial_dose": "10 mcg/min", "default_titrate_by": "10 mcg/min", "default_titrate_frequency": "Q5min", "default_max_dose": "200 mcg/min", "default_goal": "SBP < 140 / pain relief"},
 ]
 
 # Modality -> list of study names available in the Study dropdown.
@@ -533,6 +572,8 @@ _DEFAULTS = {
     "common_routes": DEFAULT_COMMON_ROUTES,
     "common_frequencies": DEFAULT_COMMON_FREQUENCIES,
     "prn_reasons": DEFAULT_PRN_REASONS,
+    "titrate_frequencies": DEFAULT_TITRATE_FREQUENCIES,
+    "drips": DEFAULT_DRIPS,
     "imaging_modalities": DEFAULT_IMAGING_MODALITIES,
     "contrast_modalities": DEFAULT_CONTRAST_MODALITIES,
     "other_orders": DEFAULT_OTHER_ORDERS,
@@ -580,6 +621,8 @@ MEDICATIONS = _data["medications"]
 COMMON_ROUTES = _data["common_routes"]
 COMMON_FREQUENCIES = _data["common_frequencies"]
 PRN_REASONS = _data["prn_reasons"]
+TITRATE_FREQUENCIES = _data["titrate_frequencies"]
+DRIPS = _data["drips"]
 IMAGING_MODALITIES = _data["imaging_modalities"]
 CONTRAST_MODALITIES = set(_data["contrast_modalities"])
 OTHER_ORDERS = _data["other_orders"]

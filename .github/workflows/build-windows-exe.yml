@@ -30,3 +30,30 @@ jobs:
         with:
           name: ED-Order-Sheet-Windows
           path: dist/ED Order Sheet.exe
+
+  build-editor:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          # data_editor.py only needs data.py, which has zero third-party
+          # deps -- deliberately not installing requirements.txt here so
+          # this build stays separate from (and lighter than) the main app.
+
+      - name: Build .exe with PyInstaller
+        run: |
+          pyinstaller --onefile --windowed --name "ED Order Data Editor" data_editor.py
+
+      - name: Upload .exe artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ED-Order-Data-Editor-Windows
+          path: dist/ED Order Data Editor.exe

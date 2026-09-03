@@ -31,7 +31,35 @@ the entire list moves together to start a fresh page, rather than some meds
 ending up on one page and the rest on the next. (Labs/imaging/other orders
 can still split across pages if they land on a boundary — only medications
 are kept together, since that's the group where a split would matter most
-for actually administering them.)
+for actually administering them.) Drips (see below) count as part of this
+same group, so a checked drip and a checked medication never get split
+apart from each other either.
+
+### PRN and Drips
+
+Only medications marked as PRN-appropriate in `data.json` show an enabled
+PRN checkbox/reason field — for the rest (antibiotics, boluses, RSI/
+paralytic drugs, etc.) that row's PRN checkbox stays permanently grayed out,
+since PRN dosing doesn't make clinical sense for them. Add
+`"allow_prn": true` to a medication entry to turn its PRN checkbox on.
+
+The separate **Drips** tab is for continuous IV infusions that need
+titration instructions rather than a simple dose/route/frequency: Initial
+Dose, Titrate By (amount), Titrate Frequency, Max Dose (not-to-exceed rate),
+and a free-text Goal (e.g. "MAP >= 65", "RASS -2 to 0"). A checked drip
+prints as e.g. "Norepinephrine (Levophed) - Start 0.05 mcg/kg/min - Titrate
+by 0.05 mcg/kg/min Q5min - Max 3 mcg/kg/min - Goal: MAP >= 65". Weight-based
+drips (`requires_weight: true`, same as medications) trigger the same
+height/weight reminder line.
+
+Some drips don't fit that start/titrate/max/goal shape at all -- Amiodarone,
+for example, is a fixed load-then-maintenance regimen, not something you
+titrate. Those are flagged `is_protocol: true` in `data.json`: instead of
+the five titration fields, the Drips tab shows one wide free-text **Protocol**
+field for them (pre-filled from `default_protocol_text`, still fully
+editable), and the printed order is just "{name} - {protocol text}".
+Amiodarone ships this way by default; flag any other drip the same way via
+the Data Editor if it's better described as a fixed protocol than a titration.
 
 ### AOP (nurse protocol) order sets
 
@@ -138,6 +166,21 @@ pyinstaller --onefile --windowed --name "ED Order Sheet" --add-data "assets:temp
 (note the `:` separator instead of `;` on macOS/Linux) — but this produces
 a macOS app bundle, not a .exe.
 
+### Building the Data Editor .exe (separately)
+
+`data_editor.py` (see below) is built the same way, but on its own —
+deliberately never bundled into "ED Order Sheet.exe":
+
+```
+pyinstaller --onefile --windowed --name "ED Order Data Editor" data_editor.py
+```
+
+No `--add-data` and no `requirements.txt` install needed for this one — the
+editor only imports `data.py`, which has zero third-party dependencies, so
+it doesn't pull in `reportlab`/`pywin32`/`PyMuPDF` at all. (The GitHub
+Actions workflow already builds and uploads both `.exe`s as separate
+artifacts on every push.)
+
 ## Print calibration
 
 The coordinates in `layout.py` were measured directly from a high-resolution
@@ -160,27 +203,42 @@ once printed on an actual form:
 
 The order lists live in **`data.json`**, a plain text file kept next to
 `app.py` (or next to `ED Order Sheet.exe` once compiled) — not baked into
-the app. Open it in any text editor:
+the app. The easiest way to edit it is the separate **Data Editor** tool
+(see below); this section documents the raw file format, useful if you
+ever want to hand-edit it or write your own tooling against it:
 
 - `labs` — list of lab names.
 - `medications` — list of objects with `name`, `default_dose`,
-  `default_route`, `default_frequency`, `default_prn_reason`, and optionally
+  `default_route`, `default_frequency`, and optionally `allow_prn: true`
+  (turns on that row's PRN checkbox; omitted/false keeps it grayed out),
+  `default_prn_reason` (only meaningful with `allow_prn: true`), and
   `requires_weight: true` for weight-based meds (checking one of these adds
   a "document height/weight" reminder line to whichever page that order
   lands on).
 - `common_routes` — the options offered in the Route dropdown.
 - `common_frequencies` — the options offered in the Frequency dropdown.
 - `prn_reasons` — the options offered in the PRN Reason dropdown.
+- `titrate_frequencies` — the options offered in the Drips tab's Frequency dropdown.
+- `drips` — the rows on the **Drips** tab. Each is `{"name",
+  "default_initial_dose", "default_titrate_by", "default_titrate_frequency",
+  "default_max_dose", "default_goal", optional "requires_weight": true}` —
+  all five dose/titration/goal fields are free text in the UI regardless of
+  the defaults. For a fixed-regimen drip (not titrated), use
+  `{"name", "is_protocol": true, "default_protocol_text", optional
+  "requires_weight": true}` instead -- see "PRN and Drips" above.
 - `imaging_modalities` — object of modality name -> list of study names.
 - `contrast_modalities` — which modalities get a "With Contrast" checkbox
   (currently `["CT", "MRI"]`).
 - `other_orders` — misc nursing/general orders.
 - `order_sets` — the buttons on the **Order Sets** tab. Each is
   `{"name", "labs": [...], "medications": [{"name", optional "dose"/
-  "route"/"frequency"/"prn": true/"prn_reason" overrides}], "imaging":
-  [{"modality", "study", "indication", optional "contrast": true}],
-  "other": [...]}`. `"study"` in an imaging entry doesn't need to already be
-  in that modality's dropdown list — it's added as free text either way.
+  "route"/"frequency"/"prn": true/"prn_reason" overrides}], "drips":
+  [{"name", optional "protocol"/"initial_dose"/"titrate_by"/
+  "titrate_frequency"/"max_dose"/"goal" overrides}], "imaging": [{"modality", "study",
+  "indication", optional "contrast": true}], "other": [...]}`. `"study"` in an imaging entry
+  doesn't need to already be in that modality's dropdown list — it's added
+  as free text either way. A medication's `"prn": true` override is ignored
+  if that medication's own `allow_prn` isn't set.
   Add `"is_aop": true` and `"indication": "..."` to make it an AOP/nurse
   protocol set instead of a regular (additive) one, or `"is_aop_modifier":
   true` (no `"indication"` needed) to make it a stacking modifier instead —
@@ -193,12 +251,51 @@ the JSON syntax, the app shows a warning on startup and falls back to the
 built-in defaults until it's fixed (your `data.json` is left untouched, so
 nothing is lost — just correct the syntax and relaunch).
 
+## Data Editor (a separate program)
+
+Hand-editing JSON is clunky, so `data_editor.py` is a second, completely
+independent Tkinter program for editing `data.json` -- add, edit, delete,
+reorder, and duplicate everything the main app reads, without touching a
+text editor. It is **not** part of "ED Order Sheet.exe" and doesn't get
+bundled into it (it imports nothing from `app.py`/`pdf_gen.py`/
+`printing.py`/`windows_print.py` -- only `data.py`, for the schema/
+defaults), so it has to be built and shipped as its own `.exe` -- see
+"Building the Data Editor .exe" above. Run it with `python3 data_editor.py`.
+
+On launch it looks for `data.json` next to itself (same convention as the
+main app), or starts from the built-in defaults if there isn't one yet.
+**File > Open...** loads any other `data.json` (e.g. the one actually
+sitting next to a deployed "ED Order Sheet.exe" elsewhere), and
+**File > Save** / **Save As...** write changes back out. It warns before
+discarding unsaved changes, and **File > Check for Issues...** scans for
+duplicate names and order sets that reference something that no longer
+exists (non-blocking -- the main app already skips missing references
+silently, this just helps you catch typos).
+
+Tabs mirror the main app's: **Labs**, **Other Orders**, and **Reference
+Lists** (Routes/Frequencies/PRN Reasons/Titrate Frequencies) are simple
+add/rename/delete/reorder lists. **Medications** and **Drips** are tables
+-- Add/Edit open a form for all of that item's fields (dose, PRN
+eligibility, weight-based flag, etc.). **Imaging** is a modality list
+(add/rename/delete, plus a "With Contrast" checkbox per modality) next to
+that modality's list of studies. **Order Sets** is the most involved: pick
+a set from the list on the left (or **+ New**) and its name, type (regular
+/ AOP / AOP Modifier), indication, and Labs/Other checklists update live as
+you edit; Medications/Drips/Imaging use their own Add/Remove list with a
+small form for each entry's overrides. Deleting something referenced
+elsewhere shows you what uses it first (labs/meds/drips/other-orders/
+imaging modalities), but doesn't block the deletion -- the main app handles
+orphaned references gracefully either way.
+
 ## Project layout
 
-- `app.py` — Tkinter GUI (patient info, Order Sets/Labs/Medications/Imaging/
-  Other tabs, Print/Preview/calibration buttons).
+- `app.py` — Tkinter GUI (patient info, Order Sets/Labs/Medications/Drips/
+  Imaging/Other tabs, Print/Preview/calibration buttons).
+- `data_editor.py` — the separate Data Editor program described above.
+  Standalone: imports only `data.py`, nothing else from this app.
 - `data.py` — loads `data.json` (creating it from built-in defaults on
-  first run) and exposes it as the order lists the UI reads from.
+  first run) and exposes it as the order lists the UI reads from; also the
+  shared schema/defaults module `data_editor.py` imports.
 - `data.json` — the editable order lists described above (git-ignored;
   generated on first run, then yours to customize per install).
 - `layout.py` — page geometry (measured form coordinates) and print

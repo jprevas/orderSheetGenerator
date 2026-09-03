@@ -68,7 +68,10 @@ class ScrollableFrame(ttk.Frame):
 class MedRow:
     """Widget state for one row in the Medications tab."""
 
-    def __init__(self, med, var, dose_var, route_var, freq_var, prn_var, prn_reason_var, prn_reason_combo, row_frame):
+    def __init__(
+        self, med, var, dose_var, route_var, freq_var,
+        prn_var, prn_reason_var, prn_check, prn_reason_combo, widgets,
+    ):
         self.med = med
         self.var = var
         self.dose_var = dose_var
@@ -76,8 +79,27 @@ class MedRow:
         self.freq_var = freq_var
         self.prn_var = prn_var
         self.prn_reason_var = prn_reason_var
+        self.prn_check = prn_check
         self.prn_reason_combo = prn_reason_combo
-        self.row_frame = row_frame
+        self.widgets = widgets  # every widget in this row, for bulk enable/disable
+
+
+class DripRow:
+    """Widget state for one row in the Drips tab."""
+
+    def __init__(
+        self, drip, var, initial_dose_var, titrate_by_var, titrate_freq_var,
+        max_dose_var, goal_var, protocol_var, widgets,
+    ):
+        self.drip = drip
+        self.var = var
+        self.initial_dose_var = initial_dose_var
+        self.titrate_by_var = titrate_by_var
+        self.titrate_freq_var = titrate_freq_var
+        self.max_dose_var = max_dose_var
+        self.goal_var = goal_var
+        self.protocol_var = protocol_var
+        self.widgets = widgets  # every widget in this row, for bulk enable/disable
 
 
 class CalibrationDialog(tk.Toplevel):
@@ -147,7 +169,7 @@ class EDOrderApp(tk.Tk):
         super().__init__()
         printing.cleanup_orphans()
 
-        self.title("ED Physician Order Sheet Generator")
+        self.title("Order Sheet Generator")
         self.geometry("1150x800")
 
         if data.LOAD_ERROR:
@@ -167,17 +189,20 @@ class EDOrderApp(tk.Tk):
         self.order_sets_tab = ScrollableFrame(self.notebook)
         self.labs_tab = ScrollableFrame(self.notebook)
         self.meds_tab = ScrollableFrame(self.notebook)
+        self.drips_tab = ScrollableFrame(self.notebook)
         self.imaging_tab = ttk.Frame(self.notebook)
         self.other_tab = ScrollableFrame(self.notebook)
 
         self.notebook.add(self.order_sets_tab, text="Order Sets")
         self.notebook.add(self.labs_tab, text="Labs")
         self.notebook.add(self.meds_tab, text="Medications")
+        self.notebook.add(self.drips_tab, text="Drips")
         self.notebook.add(self.imaging_tab, text="Imaging")
         self.notebook.add(self.other_tab, text="Other Orders")
 
         self.lab_vars = []
         self.med_rows = []
+        self.drip_rows = []
         self.other_vars = []
         self.imaging_studies = []
         self.custom_orders = []
@@ -187,6 +212,7 @@ class EDOrderApp(tk.Tk):
 
         self._build_labs_tab()
         self._build_meds_tab()
+        self._build_drips_tab()
         self._build_imaging_tab()
         self._build_other_tab()
         self._build_order_sets_tab()  # after the others -- it looks up their vars by name
@@ -253,54 +279,160 @@ class EDOrderApp(tk.Tk):
     def _build_meds_tab(self):
         body = self.meds_tab.body
 
-        header = ttk.Frame(body)
-        header.grid(row=0, column=0, sticky="w", padx=10, pady=(6, 2))
+        # Every widget below grids directly into `body` with a shared set of
+        # column indices (header included) -- that's what guarantees the
+        # header labels and the entry/combobox columns actually line up.
+        # Packing each row in its own sub-frame (the previous approach)
+        # doesn't: pack sizes each row independently from its widgets'
+        # *rendered* width, and a bold header Label measures differently
+        # per character than a regular-weight Entry/Combobox, so the
+        # column boundaries silently drift apart from row to row.
         columns = [
-            ("", 4), ("Medication", 30), ("Dose", 9), ("Route", 7),
-            ("Frequency", 9), ("PRN", 4), ("PRN Reason", 18),
+            ("", 0), ("Medication", 1), ("Dose", 2), ("Route", 3),
+            ("Frequency", 4), ("PRN", 5), ("PRN Reason", 6),
         ]
-        for text, w in columns:
-            ttk.Label(header, text=text, width=w, font=("TkDefaultFont", 9, "bold")).pack(side="left")
+        for text, col in columns:
+            ttk.Label(body, text=text, font=("TkDefaultFont", 9, "bold")).grid(
+                row=0, column=col, sticky="w", padx=(10 if col == 0 else 2, 2), pady=(6, 4)
+            )
 
         for i, med in enumerate(data.MEDICATIONS):
-            row = ttk.Frame(body)
-            row.grid(row=i + 1, column=0, sticky="w", padx=10, pady=2)
+            r = i + 1
+            widgets = []
 
             var = tk.BooleanVar(value=False)
-            ttk.Checkbutton(row, variable=var, width=4).pack(side="left")
+            cb = ttk.Checkbutton(body, variable=var)
+            cb.grid(row=r, column=0, sticky="w", padx=(10, 2), pady=1)
+            widgets.append(cb)
+
             name_text = med["name"] + (" (wt-based)" if med.get("requires_weight") else "")
-            ttk.Label(row, text=name_text, width=30).pack(side="left")
+            name_label = ttk.Label(body, text=name_text)
+            name_label.grid(row=r, column=1, sticky="w", padx=2, pady=1)
+            widgets.append(name_label)
 
             dose_var = tk.StringVar(value=med.get("default_dose", ""))
-            ttk.Entry(row, textvariable=dose_var, width=9).pack(side="left", padx=2)
+            dose_entry = ttk.Entry(body, textvariable=dose_var, width=10)
+            dose_entry.grid(row=r, column=2, sticky="w", padx=2, pady=1)
+            widgets.append(dose_entry)
 
             route_var = tk.StringVar(value=med.get("default_route", ""))
-            ttk.Combobox(
-                row, textvariable=route_var, values=data.COMMON_ROUTES, width=6
-            ).pack(side="left", padx=2)
+            route_combo = ttk.Combobox(body, textvariable=route_var, values=data.COMMON_ROUTES, width=7)
+            route_combo.grid(row=r, column=3, sticky="w", padx=2, pady=1)
+            widgets.append(route_combo)
 
             freq_var = tk.StringVar(value=med.get("default_frequency", ""))
-            ttk.Combobox(
-                row, textvariable=freq_var, values=data.COMMON_FREQUENCIES, width=8
-            ).pack(side="left", padx=2)
+            freq_combo = ttk.Combobox(body, textvariable=freq_var, values=data.COMMON_FREQUENCIES, width=9)
+            freq_combo.grid(row=r, column=4, sticky="w", padx=2, pady=1)
+            widgets.append(freq_combo)
 
             prn_var = tk.BooleanVar(value=False)
             prn_reason_var = tk.StringVar(value=med.get("default_prn_reason", ""))
             prn_reason_combo = ttk.Combobox(
-                row, textvariable=prn_reason_var, values=data.PRN_REASONS, width=16, state="disabled",
+                body, textvariable=prn_reason_var, values=data.PRN_REASONS, width=18, state="disabled",
             )
 
             def on_prn_toggle(prn_var=prn_var, combo=prn_reason_combo):
                 combo.configure(state="normal" if prn_var.get() else "disabled")
 
-            ttk.Checkbutton(row, variable=prn_var, command=on_prn_toggle, width=4).pack(side="left", padx=(6, 0))
-            prn_reason_combo.pack(side="left", padx=2)
+            prn_check = ttk.Checkbutton(body, variable=prn_var, command=on_prn_toggle)
+            prn_check.grid(row=r, column=5, sticky="w", padx=2, pady=1)
+            if not med.get("allow_prn"):
+                prn_check.configure(state="disabled")
+            widgets.append(prn_check)
+
+            prn_reason_combo.grid(row=r, column=6, sticky="w", padx=2, pady=1)
+            widgets.append(prn_reason_combo)
 
             self.med_rows.append(MedRow(
-                med, var, dose_var, route_var, freq_var, prn_var, prn_reason_var, prn_reason_combo, row,
+                med, var, dose_var, route_var, freq_var, prn_var, prn_reason_var, prn_check, prn_reason_combo, widgets,
             ))
 
         self.med_row_by_name = {row.med["name"]: row for row in self.med_rows}
+
+    # -- Drips tab --------------------------------------------------------------
+    def _build_drips_tab(self):
+        body = self.drips_tab.body
+
+        # See the comment in _build_meds_tab -- everything grids directly
+        # into `body` on shared column indices so the header actually lines
+        # up with the columns below it.
+        ttk.Label(
+            body,
+            text="Continuous IV infusions with titration instructions.",
+        ).grid(row=0, column=0, columnspan=7, sticky="w", padx=10, pady=(6, 6))
+
+        columns = [
+            ("", 0), ("Drip", 1), ("Initial Dose", 2), ("Titrate By", 3),
+            ("Frequency", 4), ("Max Dose", 5), ("Goal", 6),
+        ]
+        for text, col in columns:
+            ttk.Label(body, text=text, font=("TkDefaultFont", 9, "bold")).grid(
+                row=1, column=col, sticky="w", padx=(10 if col == 0 else 2, 2), pady=(0, 4)
+            )
+
+        for i, drip in enumerate(data.DRIPS):
+            r = i + 2
+            widgets = []
+            is_protocol = bool(drip.get("is_protocol"))
+
+            var = tk.BooleanVar(value=False)
+            cb = ttk.Checkbutton(body, variable=var)
+            cb.grid(row=r, column=0, sticky="w", padx=(10, 2), pady=1)
+            widgets.append(cb)
+
+            name_text = drip["name"] + (" (wt-based)" if drip.get("requires_weight") else "")
+            name_label = ttk.Label(body, text=name_text)
+            name_label.grid(row=r, column=1, sticky="w", padx=2, pady=1)
+            widgets.append(name_label)
+
+            protocol_var = tk.StringVar(value=drip.get("default_protocol_text", ""))
+
+            if is_protocol:
+                # Fixed, non-titrated regimen (e.g. Amiodarone's load-then-
+                # maintenance dosing) -- one free-text field spanning where
+                # the titration columns would be, instead of them.
+                protocol_entry = ttk.Entry(body, textvariable=protocol_var, width=70)
+                protocol_entry.grid(row=r, column=2, columnspan=5, sticky="w", padx=2, pady=1)
+                widgets.append(protocol_entry)
+                initial_dose_var = tk.StringVar(value="")
+                titrate_by_var = tk.StringVar(value="")
+                titrate_freq_var = tk.StringVar(value="")
+                max_dose_var = tk.StringVar(value="")
+                goal_var = tk.StringVar(value="")
+            else:
+                initial_dose_var = tk.StringVar(value=drip.get("default_initial_dose", ""))
+                initial_dose_entry = ttk.Entry(body, textvariable=initial_dose_var, width=14)
+                initial_dose_entry.grid(row=r, column=2, sticky="w", padx=2, pady=1)
+                widgets.append(initial_dose_entry)
+
+                titrate_by_var = tk.StringVar(value=drip.get("default_titrate_by", ""))
+                titrate_by_entry = ttk.Entry(body, textvariable=titrate_by_var, width=14)
+                titrate_by_entry.grid(row=r, column=3, sticky="w", padx=2, pady=1)
+                widgets.append(titrate_by_entry)
+
+                titrate_freq_var = tk.StringVar(value=drip.get("default_titrate_frequency", ""))
+                titrate_freq_combo = ttk.Combobox(
+                    body, textvariable=titrate_freq_var, values=data.TITRATE_FREQUENCIES, width=9
+                )
+                titrate_freq_combo.grid(row=r, column=4, sticky="w", padx=2, pady=1)
+                widgets.append(titrate_freq_combo)
+
+                max_dose_var = tk.StringVar(value=drip.get("default_max_dose", ""))
+                max_dose_entry = ttk.Entry(body, textvariable=max_dose_var, width=13)
+                max_dose_entry.grid(row=r, column=5, sticky="w", padx=2, pady=1)
+                widgets.append(max_dose_entry)
+
+                goal_var = tk.StringVar(value=drip.get("default_goal", ""))
+                goal_entry = ttk.Entry(body, textvariable=goal_var, width=22)
+                goal_entry.grid(row=r, column=6, sticky="w", padx=2, pady=1)
+                widgets.append(goal_entry)
+
+            self.drip_rows.append(DripRow(
+                drip, var, initial_dose_var, titrate_by_var, titrate_freq_var,
+                max_dose_var, goal_var, protocol_var, widgets,
+            ))
+
+        self.drip_row_by_name = {row.drip["name"]: row for row in self.drip_rows}
 
     # -- Imaging tab ------------------------------------------------------------
     def _build_imaging_tab(self):
@@ -556,11 +688,30 @@ class EDOrderApp(tk.Tk):
                 row.route_var.set(spec["route"])
             if "frequency" in spec:
                 row.freq_var.set(spec["frequency"])
-            if spec.get("prn"):
+            if spec.get("prn") and row.med.get("allow_prn"):
                 row.prn_var.set(True)
                 row.prn_reason_combo.configure(state="normal")
                 if "prn_reason" in spec:
                     row.prn_reason_var.set(spec["prn_reason"])
+            applied.append(spec["name"])
+
+        for spec in order_set.get("drips", []):
+            row = self.drip_row_by_name.get(spec["name"])
+            if row is None:
+                continue
+            row.var.set(True)
+            if "initial_dose" in spec:
+                row.initial_dose_var.set(spec["initial_dose"])
+            if "titrate_by" in spec:
+                row.titrate_by_var.set(spec["titrate_by"])
+            if "titrate_frequency" in spec:
+                row.titrate_freq_var.set(spec["titrate_frequency"])
+            if "max_dose" in spec:
+                row.max_dose_var.set(spec["max_dose"])
+            if "goal" in spec:
+                row.goal_var.set(spec["goal"])
+            if "protocol" in spec:
+                row.protocol_var.set(spec["protocol"])
             applied.append(spec["name"])
 
         for spec in order_set.get("imaging", []):
@@ -639,6 +790,7 @@ class EDOrderApp(tk.Tk):
         aop_sets = ([self.active_aop] + self.active_aop_modifiers) if locked and self.active_aop else []
         allowed_labs = {n for s in aop_sets for n in s.get("labs", [])}
         allowed_meds = {m["name"] for s in aop_sets for m in s.get("medications", [])}
+        allowed_drips = {d["name"] for s in aop_sets for d in s.get("drips", [])}
         allowed_other = {n for s in aop_sets for n in s.get("other", [])}
 
         for name, cell in self.lab_cell_by_name.items():
@@ -647,7 +799,13 @@ class EDOrderApp(tk.Tk):
 
         for row in self.med_rows:
             state = "normal" if (not locked or row.med["name"] in allowed_meds) else "disabled"
-            self._set_widget_tree_state(row.row_frame, state)
+            for widget in row.widgets:
+                widget.configure(state=state)
+
+        for row in self.drip_rows:
+            state = "normal" if (not locked or row.drip["name"] in allowed_drips) else "disabled"
+            for widget in row.widgets:
+                widget.configure(state=state)
 
         for name, cell in self.other_cell_by_name.items():
             state = "normal" if (not locked or name in allowed_other) else "disabled"
@@ -664,6 +822,17 @@ class EDOrderApp(tk.Tk):
         for btn in self.order_set_buttons:
             btn.configure(state="disabled" if locked else "normal")
 
+        # The blanket "normal" pass above would otherwise re-enable a PRN
+        # checkbox for a medication that doesn't allow PRN at all, and
+        # doesn't know to re-disable a PRN Reason combo whose box is
+        # currently unchecked -- fix both up regardless of `locked`.
+        for row in self.med_rows:
+            if not row.med.get("allow_prn"):
+                row.prn_check.configure(state="disabled")
+                row.prn_reason_combo.configure(state="disabled")
+            else:
+                row.prn_reason_combo.configure(state="normal" if row.prn_var.get() else "disabled")
+
     def _clear_selection_state(self):
         """Unchecks/clears everything without touching lock state -- the
         data-only half of _clear_all_orders, reused by _apply_aop so it can
@@ -674,6 +843,8 @@ class EDOrderApp(tk.Tk):
             row.var.set(False)
             row.prn_var.set(False)
             row.prn_reason_combo.configure(state="disabled")
+        for row in self.drip_rows:
+            row.var.set(False)
         for _, var in self.other_vars:
             var.set(False)
         self._clear_imaging_studies()
@@ -744,6 +915,37 @@ class EDOrderApp(tk.Tk):
             orders.append({
                 "text": text,
                 "requires_weight": bool(row.med.get("requires_weight")),
+                "group": "medications",
+            })
+
+        for row in self.drip_rows:
+            if not row.var.get():
+                continue
+            parts = [row.drip["name"]]
+            if row.drip.get("is_protocol"):
+                protocol = row.protocol_var.get().strip()
+                if protocol:
+                    parts.append(protocol)
+            else:
+                initial_dose = row.initial_dose_var.get().strip()
+                titrate_by = row.titrate_by_var.get().strip()
+                titrate_freq = row.titrate_freq_var.get().strip()
+                max_dose = row.max_dose_var.get().strip()
+                goal = row.goal_var.get().strip()
+                if initial_dose:
+                    parts.append("Start {}".format(initial_dose))
+                if titrate_by:
+                    titration = "Titrate by {}".format(titrate_by)
+                    if titrate_freq:
+                        titration += " {}".format(titrate_freq)
+                    parts.append(titration)
+                if max_dose:
+                    parts.append("Max {}".format(max_dose))
+                if goal:
+                    parts.append("Goal: {}".format(goal))
+            orders.append({
+                "text": " - ".join(parts),
+                "requires_weight": bool(row.drip.get("requires_weight")),
                 "group": "medications",
             })
 
