@@ -184,11 +184,24 @@ DEFAULT_IMAGING_MODALITIES = {
         "Head",
         "C-Spine",
         "Chest",
-        "Chest (PE Protocol)",
+        "CT Angiogram Chest (PE Protocol)",
         "Chest/Abdomen/Pelvis",
         "Abdomen/Pelvis",
+        "Pelvis",
         "CT Angiogram Head/Neck",
         "Maxillofacial",
+        "Shoulder",
+        "Humerus",
+        "Elbow",
+        "Forearm",
+        "Wrist",
+        "Hand",
+        "Hip",
+        "Femur",
+        "Knee",
+        "Tibia/Fibula",
+        "Ankle",
+        "Foot",
     ],
     "MRI": [
         "Brain",
@@ -201,18 +214,48 @@ DEFAULT_IMAGING_MODALITIES = {
         "Abdominal (RUQ/Gallbladder)",
         "Complete Abdomen",
         "Renal",
-        "Pelvic (Transabdominal)",
-        "Pelvic (Transvaginal)",
+        "Pelvis OB < 14 wks",
+        "Pelvis OB Limited",
+        "Pelvis Non-OB",
         "Aorta",
         "Soft Tissue",
-        "Venous Doppler / DVT Study",
-        "Testicular",
+        "Left lower extremity venous duplex",
+        "Right lower extremity venous duplex",
+        "Left upper extremity venous duplex",
+        "Right upper extremity venous duplex",
+        "Scrotum/Testicles",
     ],
 }
 
 # Modalities for which a "With Contrast" checkbox is offered (contrast is
 # handled as a separate toggle instead of being baked into every study name).
 DEFAULT_CONTRAST_MODALITIES = ["CT", "MRI"]
+
+# Study names (matched case-insensitively, independent of modality -- e.g.
+# "Wrist" covers both the XR and CT entries) for which the Imaging tab offers
+# a Left/Right/Bilateral dropdown. Only for studies that don't already bake
+# laterality into the name (e.g. the venous duplex and "Abdominal (RUQ/...)"
+# entries above are left out of this list on purpose).
+DEFAULT_SIDED_STUDIES = [
+    "Shoulder",
+    "Humerus",
+    "Elbow",
+    "Forearm",
+    "Wrist",
+    "Hand",
+    "Finger",
+    "Hip",
+    "Femur",
+    "Knee",
+    "Tibia/Fibula",
+    "Ankle",
+    "Foot",
+    "Toe",
+    "Rib Series",
+    "Orbit",
+    "Renal",
+    "Soft Tissue",
+]
 
 DEFAULT_OTHER_ORDERS = [
     "EKG",
@@ -353,7 +396,7 @@ DEFAULT_ORDER_SETS = [
     # potentially pregnant" -- see is_aop_modifier).
     {
         "name": "PT/INR (On Coumadin)",
-        "is_aop": True,
+        "is_aop_modifier": True,
         "indication": "On Warfarin (Coumadin)",
         "labs": ["PT/INR"],
         "medications": [],
@@ -362,7 +405,7 @@ DEFAULT_ORDER_SETS = [
     },
     {
         "name": "Oxygen (O2 Sat < 90%)",
-        "is_aop": True,
+        "is_aop_modifier": True,
         "indication": "O2 Saturation < 90%",
         "labs": [],
         "medications": [],
@@ -561,6 +604,7 @@ _DEFAULTS = {
     "drips": DEFAULT_DRIPS,
     "imaging_modalities": DEFAULT_IMAGING_MODALITIES,
     "contrast_modalities": DEFAULT_CONTRAST_MODALITIES,
+    "sided_studies": DEFAULT_SIDED_STUDIES,
     "other_orders": DEFAULT_OTHER_ORDERS,
     "order_sets": DEFAULT_ORDER_SETS,
 }
@@ -610,5 +654,6 @@ TITRATE_FREQUENCIES = _data["titrate_frequencies"]
 DRIPS = _data["drips"]
 IMAGING_MODALITIES = _data["imaging_modalities"]
 CONTRAST_MODALITIES = set(_data["contrast_modalities"])
+SIDED_STUDIES = set(_data["sided_studies"])
 OTHER_ORDERS = _data["other_orders"]
 ORDER_SETS = _data["order_sets"]

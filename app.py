@@ -455,6 +455,29 @@ class EDOrderApp(tk.Tk):
         self.contrast_check = ttk.Checkbutton(top, text="With Contrast", variable=self.contrast_var)
         self.contrast_check.grid(row=0, column=4, sticky="w", padx=6)
 
+        self.side_label = ttk.Label(top, text="Side:")
+        self.side_label.grid(row=0, column=5, sticky="e", padx=(6, 2))
+        self.laterality_var = tk.StringVar(value="")
+        self.laterality_combo = ttk.Combobox(
+            top, textvariable=self.laterality_var, values=["", "Left", "Right", "Bilateral"],
+            width=9, state="readonly",
+        )
+        self.laterality_combo.grid(row=0, column=6, sticky="w")
+
+        sided_lower = {s.lower() for s in data.SIDED_STUDIES}
+
+        def update_laterality_visibility(*_):
+            study = self.study_var.get().strip().lower()
+            if study in sided_lower:
+                self.side_label.grid()
+                self.laterality_combo.grid()
+            else:
+                self.laterality_var.set("")
+                self.side_label.grid_remove()
+                self.laterality_combo.grid_remove()
+
+        self.study_var.trace_add("write", update_laterality_visibility)
+
         def on_modality_change(*_):
             modality = self.modality_var.get()
             studies = data.IMAGING_MODALITIES.get(modality, [])
@@ -477,7 +500,7 @@ class EDOrderApp(tk.Tk):
         )
 
         ttk.Button(top, text="+ Add Study", command=self._add_imaging_study).grid(
-            row=0, column=5, rowspan=2, padx=10
+            row=0, column=7, rowspan=2, padx=10
         )
 
         list_frame = ttk.LabelFrame(self.imaging_tab, text="Studies to Order")
@@ -501,8 +524,10 @@ class EDOrderApp(tk.Tk):
         self.imaging_manage_frame = btns
 
     @staticmethod
-    def _compose_study_text(modality, study, contrast):
+    def _compose_study_text(modality, study, contrast, laterality=""):
         text = study.strip()
+        if laterality:
+            text = "{} {}".format(laterality, text)
         if modality in data.CONTRAST_MODALITIES and contrast and "contrast" not in text.lower():
             text = "{} w/ Contrast".format(text)
         return text
@@ -514,14 +539,17 @@ class EDOrderApp(tk.Tk):
         if not study:
             messagebox.showwarning("Missing study", "Choose or type a study before adding.")
             return
-        self._add_imaging_study_from(modality, study, indication, self.contrast_var.get())
+        self._add_imaging_study_from(
+            modality, study, indication, self.contrast_var.get(), self.laterality_var.get()
+        )
         self.indication_var.set("")
+        self.laterality_var.set("")
 
-    def _add_imaging_study_from(self, modality, study, indication, contrast=False):
+    def _add_imaging_study_from(self, modality, study, indication, contrast=False, laterality=""):
         """Adds one imaging study to the list/tree. Used both by the "+ Add
         Study" button (reading the current input fields) and by order sets
         (passing explicit values, without touching those input fields)."""
-        study_text = self._compose_study_text(modality, study, contrast)
+        study_text = self._compose_study_text(modality, study, contrast, laterality)
         record = {"modality": modality, "study": study_text, "indication": indication}
         self.imaging_studies.append(record)
         self.imaging_tree.insert("", "end", values=(modality, study_text, indication))
@@ -713,7 +741,8 @@ class EDOrderApp(tk.Tk):
 
         for spec in order_set.get("imaging", []):
             self._add_imaging_study_from(
-                spec["modality"], spec["study"], spec.get("indication", ""), spec.get("contrast", False),
+                spec["modality"], spec["study"], spec.get("indication", ""),
+                spec.get("contrast", False), spec.get("side", ""),
             )
             applied.append("{} {}".format(spec["modality"], spec["study"]))
 

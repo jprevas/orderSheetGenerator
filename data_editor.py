@@ -29,7 +29,7 @@ import data  # only for the DEFAULT_* constants / schema -- no other coupling
 SCHEMA_KEYS = [
     "labs", "medications", "common_routes", "common_frequencies", "prn_reasons",
     "titrate_frequencies", "drips", "imaging_modalities", "contrast_modalities",
-    "other_orders", "order_sets",
+    "sided_studies", "other_orders", "order_sets",
 ]
 
 
@@ -44,6 +44,7 @@ def default_data():
         "drips": copy.deepcopy(data.DEFAULT_DRIPS),
         "imaging_modalities": copy.deepcopy(data.DEFAULT_IMAGING_MODALITIES),
         "contrast_modalities": copy.deepcopy(data.DEFAULT_CONTRAST_MODALITIES),
+        "sided_studies": copy.deepcopy(data.DEFAULT_SIDED_STUDIES),
         "other_orders": copy.deepcopy(data.DEFAULT_OTHER_ORDERS),
         "order_sets": copy.deepcopy(data.DEFAULT_ORDER_SETS),
     }
@@ -488,6 +489,7 @@ class DataEditorApp(tk.Tk):
             ("common_frequencies", "Frequencies (Medications tab)"),
             ("prn_reasons", "PRN Reasons (Medications tab)"),
             ("titrate_frequencies", "Titrate Frequencies (Drips tab)"),
+            ("sided_studies", "Sided Studies (Imaging tab -- offers Left/Right/Bilateral;\nmatched by name across all modalities)"),
         ]
         for col, (key, label) in enumerate(specs):
             editor = StringListEditor(tab, self.data[key], label, on_change=self._mark_dirty)
@@ -1048,9 +1050,9 @@ class DataEditorApp(tk.Tk):
         ttk.Label(body, text="Imaging", font=("TkDefaultFont", 9, "bold")).pack(anchor="w", pady=(6, 2))
         img_body = ttk.Frame(body)
         img_body.pack(fill="x", pady=(0, 10))
-        img_cols = ("modality", "study", "indication", "contrast")
+        img_cols = ("modality", "study", "indication", "contrast", "side")
         self.os_img_tree = ttk.Treeview(img_body, columns=img_cols, show="headings", height=5)
-        for col, header, w in zip(img_cols, ("Modality", "Study", "Indication", "Contrast?"), (70, 180, 260, 70)):
+        for col, header, w in zip(img_cols, ("Modality", "Study", "Indication", "Contrast?", "Side"), (70, 180, 260, 70, 60)):
             self.os_img_tree.heading(col, text=header)
             self.os_img_tree.column(col, width=w)
         self.os_img_tree.pack(side="left", fill="x", expand=True)
@@ -1300,7 +1302,7 @@ class DataEditorApp(tk.Tk):
         for im in s.get("imaging", []):
             self.os_img_tree.insert("", "end", values=(
                 im.get("modality", ""), im.get("study", ""), im.get("indication", ""),
-                "Yes" if im.get("contrast") else "",
+                "Yes" if im.get("contrast") else "", im.get("side", ""),
             ))
 
     def _add_os_imaging(self):
@@ -1316,6 +1318,8 @@ class DataEditorApp(tk.Tk):
             {"key": "study", "label": "Study", "default": ""},
             {"key": "indication", "label": "Indication", "default": ""},
             {"key": "contrast", "label": "With Contrast", "kind": "checkbutton", "default": False},
+            {"key": "side", "label": "Side (optional)", "kind": "combobox",
+             "values": ["", "Left", "Right", "Bilateral"], "state": "readonly", "default": ""},
         ]
         result = FormDialog.ask(self, "Add Imaging to Order Set", fields)
         if not result:
@@ -1329,6 +1333,8 @@ class DataEditorApp(tk.Tk):
         }
         if result["contrast"]:
             spec["contrast"] = True
+        if result["side"]:
+            spec["side"] = result["side"]
         s = self.data["order_sets"][self._current_os_index]
         s.setdefault("imaging", []).append(spec)
         self._refresh_os_img_tree(s)
