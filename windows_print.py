@@ -54,7 +54,7 @@ def print_pdf_with_dialog(pdf_path, doc_name="Order Sheet"):
     (user picked a printer and clicked Print), False if they cancelled."""
     flags = (
         win32con.PD_RETURNDC
-        | win32con.PD_USEDEVMODECOPIESANDCOLLATE
+        | win32con.PD_USEDEVMODECOPIES
         | win32con.PD_NOPAGENUMS
         | win32con.PD_NOSELECTION
     )
