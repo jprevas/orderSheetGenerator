@@ -11,10 +11,62 @@ It fills in:
   and TIME ORDERED columns (the TIME NOTED & INITIALS column is left
   blank, as intended for staff to complete by hand).
 - A "Signature: ____________  Dr. {name}" line immediately after the last
-  order, ready for a wet signature.
+  order, ready for a wet signature (or, for an AOP order — see below — an
+  Ordering Nurse line plus a blank Physician line).
+
+The Physician Name field requires credentials after the name (MD, DO, PA-C,
+or NP — e.g. "Jane Smith, MD"); generating a non-AOP order sheet is blocked
+with an error until they're added.
 
 If more orders are checked than fit on one form (21 rows), it automatically
-continues onto additional pages, repeating the patient header on each.
+continues onto additional pages, repeating the patient header **and its own
+Signature line** on each page. If a weight-based medication's order lands on
+a given page, that page also gets its own "please document height/weight"
+reminder line. A single order whose text is too long for one line wraps
+onto an indented continuation row instead of shrinking to fit.
+
+**Medications never get split across a page boundary** — if the whole
+checked medication list doesn't fit in the space left on the current page,
+the entire list moves together to start a fresh page, rather than some meds
+ending up on one page and the rest on the next. (Labs/imaging/other orders
+can still split across pages if they land on a boundary — only medications
+are kept together, since that's the group where a split would matter most
+for actually administering them.)
+
+### AOP (nurse protocol) order sets
+
+The **Order Sets** tab has three kinds of buttons:
+- **Physician Order Sets** — additive. Click any number of them (and/or
+  check things manually) to combine.
+- **AOP / Nurse Protocol Order Sets** — an AOP ("Approved Order Protocol")
+  is a bundle a nurse orders under a standing protocol rather than a
+  physician composing an order individually. The 20 built in (Chest Pain,
+  Stroke, Abdominal Pain, Sepsis triage, etc.) were imported from a real
+  protocol spreadsheet. Clicking one:
+  1. Clears any current selections and checks off exactly that protocol's
+     orders (its own items stay editable/uncheckable afterward).
+  2. **Locks every other order control in the app** — every other lab,
+     medication, imaging, other-order, and custom-order field, plus every
+     regular/AOP order-set button — so nothing outside the protocol can be
+     added. A red banner ("AOP MODE ACTIVE: ...") stays visible at the
+     bottom of the window on every tab as a reminder. Click **Clear All
+     Selections** to exit AOP mode and unlock everything again.
+  3. Adds "AOP: {protocol name} - Indication: {indication}" as the very
+     first line of the printed order sheet.
+  4. Replaces the usual single physician signature line with two lines on
+     every page: **Ordering Nurse** (pre-filled from the "Ordering Nurse
+     Name" field in the patient bar, with a blank line to sign) and a
+     completely blank **Physician** line, for a physician to fill in and
+     sign later when they co-sign the protocol order.
+- **AOP Modifiers** — small add-ons (currently just "Female < 50 (Pregnancy
+  Screen)") for criteria that cut across many protocols rather than
+  defining one on their own. Unlike a regular AOP, clicking a modifier
+  does **not** clear the current selection or lock anything by itself —
+  it stays clickable even while an AOP is locking everything else, and
+  stacks its items into the currently-allowed set instead of replacing it.
+  Applied standalone (no AOP active), it just behaves like a regular
+  additive order set. Its name is appended to the AOP banner/print line
+  (e.g. "Chest Pain ... + Female < 50 (Pregnancy Screen)").
 
 Nothing is ever saved to disk. **Print Order Sheet** and **Preview on
 Screen** both write the PDF to a private OS temp file and delete it again
@@ -112,14 +164,27 @@ the app. Open it in any text editor:
 
 - `labs` — list of lab names.
 - `medications` — list of objects with `name`, `default_dose`,
-  `default_route`, and optionally `requires_weight: true` for weight-based
-  meds (checking one of these adds a "document height/weight" reminder line
-  to the printed sheet).
+  `default_route`, `default_frequency`, `default_prn_reason`, and optionally
+  `requires_weight: true` for weight-based meds (checking one of these adds
+  a "document height/weight" reminder line to whichever page that order
+  lands on).
 - `common_routes` — the options offered in the Route dropdown.
+- `common_frequencies` — the options offered in the Frequency dropdown.
+- `prn_reasons` — the options offered in the PRN Reason dropdown.
 - `imaging_modalities` — object of modality name -> list of study names.
 - `contrast_modalities` — which modalities get a "With Contrast" checkbox
   (currently `["CT", "MRI"]`).
 - `other_orders` — misc nursing/general orders.
+- `order_sets` — the buttons on the **Order Sets** tab. Each is
+  `{"name", "labs": [...], "medications": [{"name", optional "dose"/
+  "route"/"frequency"/"prn": true/"prn_reason" overrides}], "imaging":
+  [{"modality", "study", "indication", optional "contrast": true}],
+  "other": [...]}`. `"study"` in an imaging entry doesn't need to already be
+  in that modality's dropdown list — it's added as free text either way.
+  Add `"is_aop": true` and `"indication": "..."` to make it an AOP/nurse
+  protocol set instead of a regular (additive) one, or `"is_aop_modifier":
+  true` (no `"indication"` needed) to make it a stacking modifier instead —
+  see "AOP (nurse protocol) order sets" above for what those change.
 
 Edit it, save, and relaunch the app (or the .exe) — no recompiling. If
 `data.json` doesn't exist yet, the app creates one next to itself on first
@@ -130,16 +195,17 @@ nothing is lost — just correct the syntax and relaunch).
 
 ## Project layout
 
-- `app.py` — Tkinter GUI (patient info, Labs/Medications/Imaging/Other
-  tabs, Print/Preview/calibration buttons).
+- `app.py` — Tkinter GUI (patient info, Order Sets/Labs/Medications/Imaging/
+  Other tabs, Print/Preview/calibration buttons).
 - `data.py` — loads `data.json` (creating it from built-in defaults on
   first run) and exposes it as the order lists the UI reads from.
 - `data.json` — the editable order lists described above (git-ignored;
   generated on first run, then yours to customize per install).
 - `layout.py` — page geometry (measured form coordinates) and print
   calibration load/save.
-- `pdf_gen.py` — builds the PDF with `reportlab`, including pagination and
-  automatic text shrink/wrap for long order lines.
+- `pdf_gen.py` — builds the PDF with `reportlab`: per-page pagination (each
+  page gets its own signature/height-weight lines) and indented-continuation
+  wrapping for order text that doesn't fit on one line.
 - `printing.py` — private-temp-file + delayed-cleanup logic, and the
   print_order_sheet() dispatcher (native Windows dialog, else open-in-viewer
   fallback) described above; no PDF is ever written anywhere else.

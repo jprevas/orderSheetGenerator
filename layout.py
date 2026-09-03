@@ -44,6 +44,11 @@ PATIENT_CSN_Y = 712.0
 CELL_TEXT_PAD_X = 4.0
 CELL_TEXT_PAD_Y = 7.0
 
+# Extra left indent applied to an order's wrapped continuation line(s), so
+# a second physical row visually reads as "more of the order above it"
+# rather than a new dated order.
+ORDER_CONTINUATION_INDENT = 14.0
+
 FONT_NAME = "Helvetica"
 FONT_NAME_BOLD = "Helvetica-Bold"
 ORDER_FONT_SIZE = 9

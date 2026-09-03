@@ -7,3 +7,5 @@ dist/
 .idea/
 *.pdf
 data.json
+*.xlsx
+dist_windows/
