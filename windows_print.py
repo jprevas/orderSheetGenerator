@@ -58,7 +58,9 @@ def print_pdf_with_dialog(pdf_path, doc_name="Order Sheet"):
         | win32con.PD_NOPAGENUMS
         | win32con.PD_NOSELECTION
     )
-    pd = win32ui.CreatePrintDialog(flags, None)
+    # CreatePrintDialog(idRes, bPrintSetupOnly, dwFlags, parent, dll) -- 1538
+    # is AFX_IDD_PRINTDLG, the standard MFC print-dialog resource template.
+    pd = win32ui.CreatePrintDialog(1538, False, flags, None)
     if pd.DoModal() != win32con.IDOK:
         return False
 
