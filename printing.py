@@ -5,9 +5,11 @@ import platform
 import subprocess
 import tempfile
 import threading
+import traceback
 
 TEMP_PREFIX = "ed_order_sheet_"
 CLEANUP_DELAY_SECONDS = 300  # 5 minutes -- enough time to view/print it
+PRINT_DEBUG_LOG = os.path.join(tempfile.gettempdir(), "ed_order_sheet_print_debug.log")
 
 _tracked_files = set()
 _lock = threading.Lock()
@@ -75,6 +77,21 @@ def open_in_viewer(path):
         _schedule_cleanup(path)
 
 
+def _log_print_failure():
+    """Best-effort: record why the native Windows print path failed, so a
+    silent fallback to open_in_viewer can actually be diagnosed later
+    instead of just looking like "it opened in a browser for no reason".
+    Must be called from inside the except block. Never raises -- logging
+    failure must not affect printing itself."""
+    try:
+        with open(PRINT_DEBUG_LOG, "a", encoding="utf-8") as f:
+            f.write("--- native print failed ---\n")
+            f.write(traceback.format_exc())
+            f.write("\n")
+    except OSError:
+        pass
+
+
 def print_order_sheet(path):
     """Print `path`. Returns one of:
       "printed"   -- sent to a printer via the real Windows print dialog
@@ -82,13 +99,16 @@ def print_order_sheet(path):
       "opened"    -- fallback: opened in the default viewer instead (every
                      platform but Windows, or if the native path errored);
                      the user prints themselves with Ctrl+P/Cmd+P
+
+    If the native Windows path throws, the exception is logged to
+    PRINT_DEBUG_LOG before falling back -- check that file to see why.
     """
     if platform.system() == "Windows":
         try:
             import windows_print
             sent = windows_print.print_pdf_with_dialog(path, doc_name="ED Order Sheet")
         except Exception:
-            pass  # native path unavailable/failed -- fall through to opening it
+            _log_print_failure()  # native path unavailable/failed -- fall through to opening it
         else:
             discard(path)  # already fully spooled (or cancelled); nothing external needs it now
             return "printed" if sent else "cancelled"
