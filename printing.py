@@ -96,9 +96,11 @@ def print_order_sheet(path):
     """Print `path`. Returns one of:
       "printed"   -- sent to a printer via the real Windows print dialog
       "cancelled" -- user cancelled that dialog; nothing was printed
-      "opened"    -- fallback: opened in the default viewer instead (every
-                     platform but Windows, or if the native path errored);
-                     the user prints themselves with Ctrl+P/Cmd+P
+      "opened"    -- fallback: opened in the default viewer instead -- on
+                     every platform but Windows, if the native path errored
+                     (check PRINT_DEBUG_LOG), or if the user clicked "Open
+                     as PDF Instead" in the Windows printer picker; the user
+                     prints themselves with Ctrl+P/Cmd+P
 
     If the native Windows path throws, the exception is logged to
     PRINT_DEBUG_LOG before falling back -- check that file to see why.
@@ -110,8 +112,11 @@ def print_order_sheet(path):
         except Exception:
             _log_print_failure()  # native path unavailable/failed -- fall through to opening it
         else:
-            discard(path)  # already fully spooled (or cancelled); nothing external needs it now
-            return "printed" if sent else "cancelled"
+            if sent == "pdf":
+                pass  # user chose "Open as PDF Instead" -- fall through to opening it
+            else:
+                discard(path)  # already fully spooled (or cancelled); nothing external needs it now
+                return "printed" if sent else "cancelled"
 
     open_in_viewer(path)
     return "opened"
