@@ -1,13 +1,15 @@
+import io
 import os
 
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.pdfbase.pdfmetrics import stringWidth
+from pypdf import PdfReader, PdfWriter
 
 import layout as L
 
 ASSETS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
-TEMPLATE_IMAGE_PATH = os.path.join(ASSETS_DIR, "template_preview.png")
+TEMPLATE_PDF_PATH = os.path.join(ASSETS_DIR, "physician_orders.pdf")
 
 SIGNATURE_BLANK = "_" * 34
 HEIGHT_WEIGHT_TEXT = (
@@ -205,14 +207,10 @@ def _paginate(order_entries, order_date_str, order_time_str, physician_name, nur
 
 def generate_pdf(
     out_path,
-    patient_name,
-    csn,
     physician_name,
     orders,
     order_date_str,
     order_time_str,
-    include_background=False,
-    calibration=None,
     nurse_name=None,
 ):
     """
@@ -232,62 +230,75 @@ def generate_pdf(
             Ordering Nurse line (with this name) plus a blank Physician
             line, instead of the usual single physician signature line
             (used for AOP/nurse-protocol order sheets).
-    """
-    cal = calibration or L.load_calibration()
 
+    There is no patient name/CSN block -- affix a patient ID sticker to the
+    "PATIENT ID LABEL" box on the printed sheet instead.
+    """
     entries = [
         OrderEntry(o["text"], o.get("requires_weight", False), o.get("group"), o.get("bold", False))
         for o in orders
     ]
     pages = _paginate(entries, order_date_str, order_time_str, physician_name, nurse_name)
 
-    c = canvas.Canvas(out_path, pagesize=letter)
+    overlay_buffer = io.BytesIO()
+    c = canvas.Canvas(overlay_buffer, pagesize=letter)
 
     for page_rows in pages:
-        if include_background and os.path.exists(TEMPLATE_IMAGE_PATH):
-            c.drawImage(
-                TEMPLATE_IMAGE_PATH, 0, 0,
-                width=L.PAGE_WIDTH, height=L.PAGE_HEIGHT,
-                preserveAspectRatio=False, mask="auto",
-            )
-
-        _draw_patient_block(c, patient_name, csn, cal)
-        _draw_order_rows(c, page_rows, cal)
-
+        _draw_order_rows(c, page_rows)
         c.showPage()
 
     c.save()
+    _write_with_template(overlay_buffer, out_path)
     return out_path
 
 
-def _draw_patient_block(c, patient_name, csn, cal):
-    x = L.apply_x(L.PATIENT_BLOCK_X, cal)
-    c.setFont(L.FONT_NAME_BOLD, L.PATIENT_FONT_SIZE)
-    c.drawString(x, L.PATIENT_NAME_Y + cal.get("offset_y", 0.0), "Patient: {}".format(patient_name or ""))
-    c.drawString(x, L.PATIENT_CSN_Y + cal.get("offset_y", 0.0), "CSN: {}".format(csn or ""))
+def _write_with_template(overlay_buffer, out_path):
+    """Merges each page of `overlay_buffer` (a ready-to-save reportlab
+    Canvas's output) onto its own copy of the blank form template and
+    writes the result to `out_path`. Falls back to writing the overlay
+    alone if the template asset is missing."""
+    overlay_buffer.seek(0)
+
+    if not os.path.exists(TEMPLATE_PDF_PATH):
+        with open(out_path, "wb") as f:
+            f.write(overlay_buffer.getvalue())
+        return
+
+    overlay_reader = PdfReader(overlay_buffer)
+    writer = PdfWriter()
+    for overlay_page in overlay_reader.pages:
+        # A fresh PdfReader per page, not one shared reader reused across
+        # add_page() calls: pypdf caches clones by source object identity,
+        # so cloning the same template page object twice into one writer
+        # returns the *same* clone both times -- merging each page's text
+        # onto it in turn, and both pages end up showing all pages' content.
+        template_page = PdfReader(TEMPLATE_PDF_PATH).pages[0]
+        template_page.merge_page(overlay_page)
+        writer.add_page(template_page)
+    writer.write(out_path)
 
 
-def _draw_order_rows(c, page_rows, cal):
+def _draw_order_rows(c, page_rows):
     date_col_width = L.COL_DATE_TIME_DIV - L.COL_LEFT - 2 * L.CELL_TEXT_PAD_X
     time_col_width = L.COL_TIME_NOTED_DIV - L.COL_DATE_TIME_DIV - 2 * L.CELL_TEXT_PAD_X
     full_width, _cont_width = _orders_col_widths()
 
     for i, row in enumerate(page_rows):
-        row_bottom = L.row_bottom(i, cal)
+        row_bottom = L.row_bottom(i)
         baseline = row_bottom + L.CELL_TEXT_PAD_Y
 
         if row.date_str:
             fsize, dtext = _fit_single_line(row.date_str, date_col_width, L.FONT_NAME, L.DATE_TIME_FONT_SIZE)
             c.setFont(L.FONT_NAME, fsize)
-            c.drawString(L.apply_x(L.COL_LEFT + L.CELL_TEXT_PAD_X, cal), baseline, dtext)
+            c.drawString(L.apply_x(L.COL_LEFT + L.CELL_TEXT_PAD_X), baseline, dtext)
         if row.time_str:
             fsize, ttext = _fit_single_line(row.time_str, time_col_width, L.FONT_NAME, L.DATE_TIME_FONT_SIZE)
             c.setFont(L.FONT_NAME, fsize)
-            c.drawString(L.apply_x(L.COL_DATE_TIME_DIV + L.CELL_TEXT_PAD_X, cal), baseline, ttext)
+            c.drawString(L.apply_x(L.COL_DATE_TIME_DIV + L.CELL_TEXT_PAD_X), baseline, ttext)
 
         font = L.FONT_NAME_BOLD if row.bold else L.FONT_NAME
         indent_extra = L.ORDER_CONTINUATION_INDENT if row.indent else 0.0
-        ox = L.apply_x(L.COL_NOTED_ORDERS_DIV + L.CELL_TEXT_PAD_X + indent_extra, cal)
+        ox = L.apply_x(L.COL_NOTED_ORDERS_DIV + L.CELL_TEXT_PAD_X + indent_extra)
 
         if row.bold:
             # Signature / height-weight lines: synthesized by us, always
@@ -299,30 +310,3 @@ def _draw_order_rows(c, page_rows, cal):
             # Regular order rows are pre-wrapped to fit at a fixed size.
             c.setFont(font, L.ORDER_FONT_SIZE)
             c.drawString(ox, baseline, row.text)
-
-
-def generate_calibration_test_page(out_path, calibration=None):
-    """Prints row numbers and column markers at every computed position so
-    the offsets can be sanity-checked against a real blank form (hold the
-    printed test page up to the light against the paper form, or print it
-    directly on a spare form)."""
-    cal = calibration or L.load_calibration()
-    c = canvas.Canvas(out_path, pagesize=letter)
-
-    _draw_patient_block(c, "TEST PATIENT", "CSN-TEST", cal)
-
-    for i in range(L.NUM_ROWS):
-        rb = L.row_bottom(i, cal)
-        baseline = rb + L.CELL_TEXT_PAD_Y
-        c.setFont(L.FONT_NAME, 8)
-        c.drawString(L.apply_x(L.COL_LEFT + L.CELL_TEXT_PAD_X, cal), baseline, "D{}".format(i + 1))
-        c.drawString(L.apply_x(L.COL_DATE_TIME_DIV + L.CELL_TEXT_PAD_X, cal), baseline, "T{}".format(i + 1))
-        c.drawString(
-            L.apply_x(L.COL_NOTED_ORDERS_DIV + L.CELL_TEXT_PAD_X, cal),
-            baseline,
-            "Row {} - order text baseline".format(i + 1),
-        )
-
-    c.showPage()
-    c.save()
-    return out_path

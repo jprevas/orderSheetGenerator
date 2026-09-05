@@ -8,6 +8,48 @@ import sys
 
 # --- Defaults / seed content for data.json --------------------------------
 
+# Suggestions offered in the Physician Name field (still freely editable --
+# picking one doesn't block typing any other name).
+DEFAULT_PROVIDERS = [
+    "Kaitlyn Ayerle, PA-C",
+    "Brian Baker, MD",
+    "Melanie Betz, PA-C",
+    "James Clemmens, MD",
+    "Jordan Desruisseaux, PA-C",
+    "Dina Esterowitz, MD",
+    "Anne Ferguson, MD",
+    "Janet Galla, NP",
+    "Colleen Gibson, MD",
+    "Scott Gummerson, MD",
+    "Tanya Haag, DO",
+    "Thomas Havens, PA-C",
+    "Robert A. Heller, MD",
+    "Charles Iliff, MD",
+    "Elizabeth Kenez, MD",
+    "Hannah Kleiman, MD",
+    "Matthew Kuehn, MD",
+    "John Lapczynski, DO",
+    "Sarah Lee, MD",
+    "Samuel Long, MD",
+    "Caitlin Mase, MD",
+    "Melissa J. Mikami, MD",
+    "John C. Moghtader, MD",
+    "David Mooradian, MD",
+    "Joseph Odierno, MD",
+    "Lauren Paish, MD",
+    "Daniel Paluchowski, MD",
+    "Shannon Petukhov, MD",
+    "Lauren Power, NP",
+    "James Prevas, MD",
+    "Amanda Quiller, PA-C",
+    "Musidapa Rouzi, MD",
+    "Matthew Skrenta, DO",
+    "Amy Slater, PA-C",
+    "Debra Ann Smith, NP",
+    "Ariel Strumpf, MD",
+    "Jaclyn Wood, MD",
+]
+
 DEFAULT_LABS = [
     "CBC",
     "BMP",
@@ -98,6 +140,7 @@ DEFAULT_MEDICATIONS = [
     {"name": "Sodium Bicarbonate", "default_dose": "1 amp", "default_route": "IV", "default_frequency": "Once"},
     {"name": "Activated Charcoal", "default_dose": "50 g", "default_route": "PO", "default_frequency": "Once", "requires_weight": True},
     {"name": "Tetanus/Tdap Booster", "default_dose": "0.5 mL", "default_route": "IM", "default_frequency": "Once"},
+    {"name": "Propofol", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
     {"name": "Ketamine", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
     {"name": "Etomidate", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
     {"name": "Rocuronium", "default_dose": "", "default_route": "IV", "default_frequency": "Once", "requires_weight": True},
@@ -124,6 +167,13 @@ DEFAULT_PRN_REASONS = [
 # Common titration frequencies offered in the Drips tab (still freely editable).
 DEFAULT_TITRATE_FREQUENCIES = [
     "Q5min", "Q10min", "Q15min", "Q30min", "Q1H", "Q2H", "Per Protocol",
+]
+
+# Suggestions offered in the EKG Indication field on the Other Orders tab
+# (still freely editable).
+DEFAULT_EKG_INDICATIONS = [
+    "Chest Pain", "Shortness of Breath", "Palpitations", "Syncope",
+    "Dizziness/Lightheadedness", "Arrhythmia", "Abnormal Vital Signs", "Pre-Op",
 ]
 
 # Continuous IV drip/infusion medications, shown on their own "Drips" tab
@@ -404,6 +454,15 @@ DEFAULT_ORDER_SETS = [
         "other": [],
     },
     {
+        "name": "EKG",
+        "is_aop_modifier": True,
+        "ekg_indication": "Chest Pain",
+        "labs": [],
+        "medications": [],
+        "imaging": [],
+        "other": ["EKG"],
+    },
+    {
         "name": "Oxygen (O2 Sat < 90%)",
         "is_aop_modifier": True,
         "indication": "O2 Saturation < 90%",
@@ -595,12 +654,14 @@ DEFAULT_ORDER_SETS = [
 ]
 
 _DEFAULTS = {
+    "providers": DEFAULT_PROVIDERS,
     "labs": DEFAULT_LABS,
     "medications": DEFAULT_MEDICATIONS,
     "common_routes": DEFAULT_COMMON_ROUTES,
     "common_frequencies": DEFAULT_COMMON_FREQUENCIES,
     "prn_reasons": DEFAULT_PRN_REASONS,
     "titrate_frequencies": DEFAULT_TITRATE_FREQUENCIES,
+    "ekg_indications": DEFAULT_EKG_INDICATIONS,
     "drips": DEFAULT_DRIPS,
     "imaging_modalities": DEFAULT_IMAGING_MODALITIES,
     "contrast_modalities": DEFAULT_CONTRAST_MODALITIES,
@@ -645,12 +706,14 @@ def _load():
 
 _data, LOAD_ERROR = _load()
 
+PROVIDERS = _data["providers"]
 LABS = _data["labs"]
 MEDICATIONS = _data["medications"]
 COMMON_ROUTES = _data["common_routes"]
 COMMON_FREQUENCIES = _data["common_frequencies"]
 PRN_REASONS = _data["prn_reasons"]
 TITRATE_FREQUENCIES = _data["titrate_frequencies"]
+EKG_INDICATIONS = _data["ekg_indications"]
 DRIPS = _data["drips"]
 IMAGING_MODALITIES = _data["imaging_modalities"]
 CONTRAST_MODALITIES = set(_data["contrast_modalities"])

@@ -1,12 +1,16 @@
 # ED Physician Order Sheet Generator
 
 A desktop app for checking off common Emergency Department orders (labs,
-medications, imaging, and other nursing orders) and generating a PDF that
-prints **directly into the boxes** of the pre-printed Anne Arundel Medical
-Center "Physician Orders" paper form.
+medications, imaging, and other nursing orders) and generating a PDF of the
+Anne Arundel Medical Center "Physician Orders" form, with the checked
+orders printed **directly into its boxes**. The form itself is baked into
+every generated PDF, so it prints on plain paper — no pre-printed stock
+needed.
+
+There is no patient name/CSN field anywhere in the app -- affix a patient
+ID sticker to the printed sheet's "PATIENT ID LABEL" box instead.
 
 It fills in:
-- Patient name and CSN, top left of the page.
 - One row per checked order, with today's date/time in the DATE ORDERED
   and TIME ORDERED columns (the TIME NOTED & INITIALS column is left
   blank, as intended for staff to complete by hand).
@@ -14,13 +18,15 @@ It fills in:
   order, ready for a wet signature (or, for an AOP order — see below — an
   Ordering Nurse line plus a blank Physician line).
 
-The Physician Name field requires credentials after the name (MD, DO, PA-C,
-or NP — e.g. "Jane Smith, MD"); generating a non-AOP order sheet is blocked
-with an error until they're added.
+The Physician Name field offers a dropdown of known providers (customizable
+via `data.json`'s `providers` list) but is still a free-text field -- typing
+a name not on the list works fine. It requires credentials after the name
+(MD, DO, PA-C, or NP — e.g. "Jane Smith, MD") either way; generating a
+non-AOP order sheet is blocked with an error until they're added.
 
 If more orders are checked than fit on one form (21 rows), it automatically
-continues onto additional pages, repeating the patient header **and its own
-Signature line** on each page. If a weight-based medication's order lands on
+continues onto additional pages, repeating **its own Signature line** on
+each page. If a weight-based medication's order lands on
 a given page, that page also gets its own "please document height/weight"
 reminder line. A single order whose text is too long for one line wraps
 onto an indented continuation row instead of shrinking to fit.
@@ -83,7 +89,7 @@ The **Order Sets** tab has three kinds of buttons:
      first line of the printed order sheet.
   4. Replaces the usual single physician signature line with two lines on
      every page: **Ordering Nurse** (pre-filled from the "Ordering Nurse
-     Name" field in the patient bar, with a blank line to sign) and a
+     Name" field in the Order Info bar, with a blank line to sign) and a
      completely blank **Physician** line, for a physician to fill in and
      sign later when they co-sign the protocol order.
 - **AOP Modifiers** — small add-ons (currently just "Female < 50 (Pregnancy
@@ -132,30 +138,30 @@ patient order sheet, so this app never uses them.
    python3 app.py
    ```
 
-Since the pre-printed paper form usually isn't loaded in a home/office
-printer, use **Preview on Screen** — it overlays your entries on a scan of
-the actual form so you can eyeball alignment. Use **Print Order Sheet** when
-you're ready to print for real onto the hospital's pre-printed stock (this
-mode never draws the scanned form background — only your entries, positioned
-to land in the form's boxes).
+Use **Preview on Screen** to eyeball alignment before printing, or **Print
+Order Sheet** when you're ready to print for real — both generate the same
+PDF, with the form itself baked in behind your entries, so either one prints
+on plain paper.
 
 ## Print calibration
 
 The coordinates in `layout.py` were measured directly from a high-resolution
 photo of the blank form and verified by overlaying a generated grid back
-onto it, so alignment should be close out of the box. Every printer feeds
-paper with a slightly different margin, though, so if text is a little off
-once printed on an actual form:
+onto it, and `DEFAULT_CALIBRATION` applies a small fine-tuning offset on
+top of that, measured once against this app's baked-in form template
+(`assets/physician_orders.pdf`). There's no in-app calibration UI anymore
+-- since that template (not a physical pre-printed form whose feed margin
+varies by printer) is what's always printed on now, the offset doesn't
+vary either. If alignment ever needs adjusting (e.g. after swapping in a
+different scan of the form), edit the values in `layout.py` directly.
 
-1. Open the app, click **Print Calibration...**.
-2. Click **Print Test Page** — it prints small row/column markers at every
-   position the app will write to.
-3. Hold that test page up to a blank form (or print it directly onto a
-   spare form) and note how far off it is, in points (72pt = 1 inch).
-4. Enter the horizontal/vertical offsets (and row spacing scale, if the
-   rows are drifting more the further down the page you go) and **Save**.
-   The offsets are stored in `~/.ed_order_sheet_calibration.json` and
-   applied to every PDF generated afterward.
+The Labs, Medications, and Other Orders tabs group their items under
+subject-line headings (e.g. "Hematology / Coagulation", "Antibiotics",
+"Cardiac / Monitoring") to make a long checklist easier to scan. This
+grouping is a fixed, presentation-only convenience defined in `app.py`
+(`LAB_CATEGORIES`/`MED_CATEGORIES`/`OTHER_CATEGORIES`), not part of
+`data.json` -- anything added via the Data Editor that isn't in one of
+those groups still shows up, under a trailing "Other" heading.
 
 ## Customizing the order sets (no recompiling needed)
 
@@ -165,6 +171,8 @@ the app. The easiest way to edit it is the separate **Data Editor** tool
 (see below); this section documents the raw file format, useful if you
 ever want to hand-edit it or write your own tooling against it:
 
+- `providers` — suggestions offered in the Physician Name field's dropdown
+  (still a free-text field; typing anything else is fine).
 - `labs` — list of lab names.
 - `medications` — list of objects with `name`, `default_dose`,
   `default_route`, `default_frequency`, and optionally `allow_prn: true`
@@ -177,6 +185,8 @@ ever want to hand-edit it or write your own tooling against it:
 - `common_frequencies` — the options offered in the Frequency dropdown.
 - `prn_reasons` — the options offered in the PRN Reason dropdown.
 - `titrate_frequencies` — the options offered in the Drips tab's Frequency dropdown.
+- `ekg_indications` — suggestions offered in the Other Orders tab's EKG
+  Indication field (see below; still freely editable, not a fixed list).
 - `drips` — the rows on the **Drips** tab. Each is `{"name",
   "default_initial_dose", "default_titrate_by", "default_titrate_frequency",
   "default_max_dose", "default_goal", optional "requires_weight": true}` —
@@ -187,16 +197,23 @@ ever want to hand-edit it or write your own tooling against it:
 - `imaging_modalities` — object of modality name -> list of study names.
 - `contrast_modalities` — which modalities get a "With Contrast" checkbox
   (currently `["CT", "MRI"]`).
-- `other_orders` — misc nursing/general orders.
+- `other_orders` — misc nursing/general orders. The "EKG" entry (if
+  present) gets an extra free-text **Indication** field next to its
+  checkbox, disabled until EKG is checked; a non-blank indication is
+  appended to the printed order as "EKG - Indication: {text}". An order
+  set can pre-fill it via `"ekg_indication"` (see below).
 - `order_sets` — the buttons on the **Order Sets** tab. Each is
   `{"name", "labs": [...], "medications": [{"name", optional "dose"/
   "route"/"frequency"/"prn": true/"prn_reason" overrides}], "drips":
   [{"name", optional "protocol"/"initial_dose"/"titrate_by"/
   "titrate_frequency"/"max_dose"/"goal" overrides}], "imaging": [{"modality", "study",
-  "indication", optional "contrast": true}], "other": [...]}`. `"study"` in an imaging entry
-  doesn't need to already be in that modality's dropdown list — it's added
-  as free text either way. A medication's `"prn": true` override is ignored
-  if that medication's own `allow_prn` isn't set.
+  "indication", optional "contrast": true}], "other": [...], optional
+  "ekg_indication"}`. `"study"` in an imaging entry doesn't need to already
+  be in that modality's dropdown list — it's added as free text either way.
+  A medication's `"prn": true` override is ignored if that medication's own
+  `allow_prn` isn't set. `"ekg_indication"` only has an effect if `"other"`
+  also includes `"EKG"` -- it pre-fills (and enables) the Indication field
+  when the set is applied, same as if it had been typed in by hand.
   Add `"is_aop": true` and `"indication": "..."` to make it an AOP/nurse
   protocol set instead of a regular (additive) one, or `"is_aop_modifier":
   true` (no `"indication"` needed) to make it a stacking modifier instead —
@@ -231,8 +248,8 @@ exists (non-blocking -- the main app already skips missing references
 silently, this just helps you catch typos).
 
 Tabs mirror the main app's: **Labs**, **Other Orders**, and **Reference
-Lists** (Routes/Frequencies/PRN Reasons/Titrate Frequencies) are simple
-add/rename/delete/reorder lists. **Medications** and **Drips** are tables
+Lists** (Providers/Routes/Frequencies/PRN Reasons/Titrate Frequencies/EKG
+Indications) are simple add/rename/delete/reorder lists. **Medications** and **Drips** are tables
 -- Add/Edit open a form for all of that item's fields (dose, PRN
 eligibility, weight-based flag, etc.). **Imaging** is a modality list
 (add/rename/delete, plus a "With Contrast" checkbox per modality) next to
@@ -247,8 +264,8 @@ orphaned references gracefully either way.
 
 ## Project layout
 
-- `app.py` — Tkinter GUI (patient info, Order Sets/Labs/Medications/Drips/
-  Imaging/Other tabs, Print/Preview/calibration buttons).
+- `app.py` — Tkinter GUI (Order Info bar, Order Sets/Labs/Medications/Drips/
+  Imaging/Other tabs, Print/Preview buttons).
 - `data_editor.py` — the separate Data Editor program described above.
   Standalone: imports only `data.py`, nothing else from this app.
 - `data.py` — loads `data.json` (creating it from built-in defaults on
@@ -256,16 +273,20 @@ orphaned references gracefully either way.
   shared schema/defaults module `data_editor.py` imports.
 - `data.json` — the editable order lists described above (git-ignored;
   generated on first run, then yours to customize per install).
-- `layout.py` — page geometry (measured form coordinates) and print
-  calibration load/save.
+- `layout.py` — page geometry (measured form coordinates) and the fixed
+  print calibration offset.
 - `pdf_gen.py` — builds the PDF with `reportlab`: per-page pagination (each
   page gets its own signature/height-weight lines) and indented-continuation
-  wrapping for order text that doesn't fit on one line.
+  wrapping for order text that doesn't fit on one line. Each page is drawn
+  as a transparent overlay, then merged with `pypdf` onto its own copy of
+  `assets/physician_orders.pdf` so the form background is baked into the
+  output.
 - `printing.py` — private-temp-file + delayed-cleanup logic, and the
   print_order_sheet() dispatcher (native Windows dialog, else open-in-viewer
   fallback) described above; no PDF is ever written anywhere else.
 - `windows_print.py` — the native Windows print dialog + GDI printing
   implementation; raises ImportError on any non-Windows platform.
-- `assets/template_preview.png` — a scan of the blank form, used only in
-  Preview mode; never drawn in the print output.
-- `template.HEIC` — the original source photo of the blank form.
+- `assets/physician_orders.pdf` — a vector PDF of the blank form, merged
+  into every generated order sheet as its background.
+- `template.HEIC` — the original source photo of the blank form, used only
+  to measure the coordinates in `layout.py`.

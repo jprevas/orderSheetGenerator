@@ -2,9 +2,10 @@
 ED Physician Order Sheet Generator
 
 A small desktop app for checking off common Emergency Department orders
-and generating a PDF that prints directly into the boxes of the
-pre-printed "Physician Orders" paper form (see assets/template_preview.png
-for what that form looks like).
+and generating a PDF of the "Physician Orders" form (see
+assets/physician_orders.pdf), with the checked orders printed directly
+into its boxes -- the form itself is baked into every generated PDF, so
+it prints on plain paper, no pre-printed stock needed.
 """
 
 import platform
@@ -27,6 +28,63 @@ def _has_credentials(name):
     stripped = name.strip().rstrip(".")
     upper = stripped.upper()
     return any(upper.endswith(suffix) for suffix in CREDENTIAL_SUFFIXES)
+
+
+# Presentation-only grouping for the Labs/Medications/Other Orders tabs --
+# purely a UI convenience to make a long flat checklist/table easier to
+# scan, not part of the data.json schema. A name not listed in any group
+# here (e.g. something added later via the Data Editor) falls into a
+# trailing "Other" section instead of disappearing.
+LAB_CATEGORIES = [
+    ("Hematology / Coagulation", ["CBC", "PT/INR", "PTT", "D-Dimer", "Type & Screen", "Type & Crossmatch"]),
+    ("Chemistry", ["BMP", "CMP", "LFTs", "Lipase", "Magnesium", "Phosphorus", "Ammonia", "Lactic Acid", "TSH", "POC Glucose"]),
+    ("Cardiac Markers", ["Troponin", "BNP"]),
+    ("Blood Gas", ["Venous Blood Gas (VBG)", "Arterial Blood Gas (ABG)"]),
+    ("Urine / Pregnancy", ["Urinalysis (UA)", "Urine Culture", "Urine hCG", "Serum hCG (Qualitative)", "Serum hCG (Quantitative)"]),
+    ("Microbiology", ["Blood Cultures x2", "Rapid Strep", "Influenza/COVID/RSV PCR"]),
+    ("Toxicology", ["Serum Tox", "Urine Toxicology Screen", "Ethanol Level", "Acetaminophen Level", "Salicylate Level"]),
+]
+
+MED_CATEGORIES = [
+    ("Analgesics / Antipyretics", ["Acetaminophen (Tylenol)", "Ibuprofen (Motrin)", "Ketorolac (Toradol)", "Aspirin", "Morphine", "Fentanyl", "Nitroglycerin SL"]),
+    ("Antiemetics / GI", ["Ondansetron (Zofran) ODT", "Ondansetron (Zofran)", "Metoclopramide (Reglan)", "Famotidine (Pepcid)"]),
+    ("Allergy / Anaphylaxis", ["Diphenhydramine (Benadryl)", "Epinephrine 1:1,000"]),
+    ("Sedation / Anxiolysis", ["Lorazepam (Ativan)"]),
+    ("Reversal Agents", ["Naloxone (Narcan)"]),
+    ("Respiratory", ["Albuterol Nebulizer", "Ipratropium Nebulizer"]),
+    ("Steroids", ["Methylprednisolone (Solu-Medrol)", "Dexamethasone", "Prednisone"]),
+    ("Antibiotics", ["Ceftriaxone (Rocephin)", "Cefazolin (Ancef)", "Cefepime", "Vancomycin", "Ampicillin-Sulbactam (Unasyn)", "Piperacillin-Tazobactam (Zosyn)", "Azithromycin", "Metronidazole (Flagyl)"]),
+    ("IV Fluids / Electrolytes", ["Normal Saline Bolus", "Lactated Ringers Bolus", "Dextrose 50%", "Insulin Regular for Hyperkalemia", "Insulin Aspart (Novolog)", "Magnesium Sulfate", "Calcium Gluconate", "Sodium Bicarbonate"]),
+    ("Toxicology / Prophylaxis", ["Activated Charcoal", "Tetanus/Tdap Booster"]),
+    ("Sedation / RSI / Paralytics", ["Propofol", "Ketamine", "Etomidate", "Rocuronium", "Succinylcholine"]),
+]
+
+OTHER_CATEGORIES = [
+    ("Cardiac / Monitoring", ["EKG", "Continuous Cardiac Monitoring", "Continuous Pulse Oximetry", "Vital Signs per ED Protocol"]),
+    ("Access / Respiratory", ["IV Access", "Nasal Cannula Oxygen @ 2 L/min", "Foley Catheter", "Straight Catheterization"]),
+    ("Diet / Precautions", ["NPO", "Fall Precautions", "Aspiration Precautions", "Strict Intake & Output", "Close Observation (Suicide Precautions)", "C-Collar Placement"]),
+    ("Wound / Orthopedic Care", ["Wound Care / Dressing Change", "Splint Application", "Ice Pack to Affected Area", "Elevate Extremity", "Weight-Bearing as Tolerated", "Non-Weight-Bearing"]),
+    ("Neuro / Stroke", ["NIH Stroke Scale", "Neuro Checks", "Dysphagia Screen"]),
+    ("Consults / Therapy", ["Social Work Consult", "Case Management Consult", "Incentive Spirometry"]),
+]
+
+
+def _grouped(items, categories, name_of=lambda item: item):
+    """Groups `items` into (label, [item, ...]) sections per `categories`,
+    in the order given there; anything left over goes into a trailing
+    "Other" section, preserving its original relative order."""
+    assigned = set()
+    groups = []
+    for label, wanted in categories:
+        by_name = {name_of(item): item for item in items}
+        present = [by_name[n] for n in wanted if n in by_name]
+        if present:
+            groups.append((label, present))
+            assigned.update(name_of(item) for item in present)
+    leftover = [item for item in items if name_of(item) not in assigned]
+    if leftover:
+        groups.append(("Other", leftover))
+    return groups
 
 
 class ScrollableFrame(ttk.Frame):
@@ -99,68 +157,6 @@ class DripRow:
         self.widgets = widgets  # every widget in this row, for bulk enable/disable
 
 
-class CalibrationDialog(tk.Toplevel):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.title("Print Calibration")
-        self.resizable(False, False)
-        self.cal = L.load_calibration()
-
-        pad = {"padx": 8, "pady": 6}
-
-        info = (
-            "If printed text doesn't line up with the boxes on the paper form,\n"
-            "nudge the offsets below (in points, 72pt = 1 inch), then print the\n"
-            "test page and compare it against a blank form."
-        )
-        ttk.Label(self, text=info, justify="left").grid(row=0, column=0, columnspan=2, **pad)
-
-        ttk.Label(self, text="Horizontal offset (pt, + = right):").grid(row=1, column=0, sticky="e", **pad)
-        self.x_var = tk.DoubleVar(value=self.cal["offset_x"])
-        ttk.Entry(self, textvariable=self.x_var, width=10).grid(row=1, column=1, sticky="w", **pad)
-
-        ttk.Label(self, text="Vertical offset (pt, + = up):").grid(row=2, column=0, sticky="e", **pad)
-        self.y_var = tk.DoubleVar(value=self.cal["offset_y"])
-        ttk.Entry(self, textvariable=self.y_var, width=10).grid(row=2, column=1, sticky="w", **pad)
-
-        ttk.Label(self, text="Row spacing scale (1.0 = default):").grid(row=3, column=0, sticky="e", **pad)
-        self.scale_var = tk.DoubleVar(value=self.cal["row_scale"])
-        ttk.Entry(self, textvariable=self.scale_var, width=10).grid(row=3, column=1, sticky="w", **pad)
-
-        btns = ttk.Frame(self)
-        btns.grid(row=4, column=0, columnspan=2, pady=(10, 10))
-        ttk.Button(btns, text="Print Test Page", command=self.print_test).pack(side="left", padx=4)
-        ttk.Button(btns, text="Save", command=self.save).pack(side="left", padx=4)
-        ttk.Button(btns, text="Reset to Defaults", command=self.reset).pack(side="left", padx=4)
-        ttk.Button(btns, text="Close", command=self.destroy).pack(side="left", padx=4)
-
-    def _current_cal(self):
-        return {
-            "offset_x": self.x_var.get(),
-            "offset_y": self.y_var.get(),
-            "row_scale": self.scale_var.get(),
-        }
-
-    def print_test(self):
-        path = printing.new_temp_pdf_path()
-        try:
-            pdf_gen.generate_calibration_test_page(path, self._current_cal())
-        except Exception as exc:  # noqa: BLE001
-            printing.discard(path)
-            messagebox.showerror("Error generating test page", str(exc))
-            return
-        printing.open_in_viewer(path)
-
-    def save(self):
-        L.save_calibration(self._current_cal())
-        messagebox.showinfo("Saved", "Calibration saved. It will be used for all future PDFs.")
-
-    def reset(self):
-        self.x_var.set(L.DEFAULT_CALIBRATION["offset_x"])
-        self.y_var.set(L.DEFAULT_CALIBRATION["offset_y"])
-        self.scale_var.set(L.DEFAULT_CALIBRATION["row_scale"])
-
-
 class EDOrderApp(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -178,7 +174,12 @@ class EDOrderApp(tk.Tk):
                 ),
             ))
 
-        self._build_patient_bar()
+        top_row = ttk.Frame(self)
+        top_row.pack(fill="x")
+        self._build_order_info_bar(top_row)
+        ttk.Button(top_row, text="Clear All Selections", command=self._clear_all_orders).pack(
+            side="right", anchor="n", padx=8, pady=8
+        )
 
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill="both", expand=True, padx=8, pady=(4, 0))
@@ -216,22 +217,20 @@ class EDOrderApp(tk.Tk):
 
         self._build_bottom_bar()
 
-    # -- Patient info -----------------------------------------------------
-    def _build_patient_bar(self):
-        frame = ttk.LabelFrame(self, text="Patient / Order Info")
-        frame.pack(fill="x", padx=8, pady=8)
+    # -- Order info ---------------------------------------------------------
+    def _build_order_info_bar(self, parent):
+        frame = ttk.LabelFrame(parent, text="Order Info")
+        frame.pack(side="left", fill="x", expand=True, padx=8, pady=8)
 
         now = datetime.now()
 
-        def add_field(label, col, width=18, default=""):
-            ttk.Label(frame, text=label).grid(row=0, column=col * 2, sticky="e", padx=(10, 2), pady=6)
-            var = tk.StringVar(value=default)
-            ttk.Entry(frame, textvariable=var, width=width).grid(row=0, column=col * 2 + 1, sticky="w", pady=6)
-            return var
-
-        self.patient_name_var = add_field("Patient Name:", 0, width=22)
-        self.csn_var = add_field("CSN:", 1, width=14)
-        self.physician_var = add_field("Physician Name (with credentials, e.g. \"MD\"):", 2, width=24)
+        ttk.Label(frame, text="Physician Name (with credentials, e.g. \"MD\"):").grid(
+            row=0, column=0, sticky="e", padx=(10, 2), pady=6
+        )
+        self.physician_var = tk.StringVar(value="")
+        ttk.Combobox(
+            frame, textvariable=self.physician_var, values=data.PROVIDERS, width=26,
+        ).grid(row=0, column=1, sticky="w", pady=6)
 
         row2 = ttk.Frame(frame)
         row2.grid(row=1, column=0, columnspan=6, sticky="w")
@@ -261,14 +260,21 @@ class EDOrderApp(tk.Tk):
         body = self.labs_tab.body
         cols = 3
         self.lab_cell_by_name = {}
-        for i, lab in enumerate(data.LABS):
-            r, c = divmod(i, cols)
-            cell = ttk.Frame(body)
-            cell.grid(row=r, column=c, sticky="w", padx=10, pady=4)
-            var = tk.BooleanVar(value=False)
-            ttk.Checkbutton(cell, text=lab, variable=var, width=28).pack(side="left")
-            self.lab_vars.append((lab, var))
-            self.lab_cell_by_name[lab] = cell
+        row = 0
+        for label, labs in _grouped(data.LABS, LAB_CATEGORIES):
+            ttk.Label(body, text=label, font=("TkDefaultFont", 9, "bold")).grid(
+                row=row, column=0, columnspan=cols, sticky="w", padx=10, pady=(10, 2)
+            )
+            start_row = row + 1
+            for i, lab in enumerate(labs):
+                r, c = divmod(i, cols)
+                cell = ttk.Frame(body)
+                cell.grid(row=start_row + r, column=c, sticky="w", padx=10, pady=4)
+                var = tk.BooleanVar(value=False)
+                ttk.Checkbutton(cell, text=lab, variable=var, width=28).pack(side="left")
+                self.lab_vars.append((lab, var))
+                self.lab_cell_by_name[lab] = cell
+            row = start_row + divmod(len(labs) - 1, cols)[0] + 1
 
         self.lab_var_by_name = {name: var for name, var in self.lab_vars}
 
@@ -293,56 +299,62 @@ class EDOrderApp(tk.Tk):
                 row=0, column=col, sticky="w", padx=(10 if col == 0 else 2, 2), pady=(6, 4)
             )
 
-        for i, med in enumerate(data.MEDICATIONS):
-            r = i + 1
-            widgets = []
-
-            var = tk.BooleanVar(value=False)
-            cb = ttk.Checkbutton(body, variable=var)
-            cb.grid(row=r, column=0, sticky="w", padx=(10, 2), pady=1)
-            widgets.append(cb)
-
-            name_text = med["name"] + (" (wt-based)" if med.get("requires_weight") else "")
-            name_label = ttk.Label(body, text=name_text)
-            name_label.grid(row=r, column=1, sticky="w", padx=2, pady=1)
-            widgets.append(name_label)
-
-            dose_var = tk.StringVar(value=med.get("default_dose", ""))
-            dose_entry = ttk.Entry(body, textvariable=dose_var, width=10)
-            dose_entry.grid(row=r, column=2, sticky="w", padx=2, pady=1)
-            widgets.append(dose_entry)
-
-            route_var = tk.StringVar(value=med.get("default_route", ""))
-            route_combo = ttk.Combobox(body, textvariable=route_var, values=data.COMMON_ROUTES, width=7)
-            route_combo.grid(row=r, column=3, sticky="w", padx=2, pady=1)
-            widgets.append(route_combo)
-
-            freq_var = tk.StringVar(value=med.get("default_frequency", ""))
-            freq_combo = ttk.Combobox(body, textvariable=freq_var, values=data.COMMON_FREQUENCIES, width=9)
-            freq_combo.grid(row=r, column=4, sticky="w", padx=2, pady=1)
-            widgets.append(freq_combo)
-
-            prn_var = tk.BooleanVar(value=False)
-            prn_reason_var = tk.StringVar(value=med.get("default_prn_reason", ""))
-            prn_reason_combo = ttk.Combobox(
-                body, textvariable=prn_reason_var, values=data.PRN_REASONS, width=18, state="disabled",
+        r = 1
+        for label, meds in _grouped(data.MEDICATIONS, MED_CATEGORIES, name_of=lambda m: m["name"]):
+            ttk.Label(body, text=label, font=("TkDefaultFont", 9, "bold", "italic")).grid(
+                row=r, column=0, columnspan=len(columns), sticky="w", padx=10, pady=(10, 2)
             )
+            r += 1
+            for med in meds:
+                widgets = []
 
-            def on_prn_toggle(prn_var=prn_var, combo=prn_reason_combo):
-                combo.configure(state="normal" if prn_var.get() else "disabled")
+                var = tk.BooleanVar(value=False)
+                cb = ttk.Checkbutton(body, variable=var)
+                cb.grid(row=r, column=0, sticky="w", padx=(10, 2), pady=1)
+                widgets.append(cb)
 
-            prn_check = ttk.Checkbutton(body, variable=prn_var, command=on_prn_toggle)
-            prn_check.grid(row=r, column=5, sticky="w", padx=2, pady=1)
-            if not med.get("allow_prn"):
-                prn_check.configure(state="disabled")
-            widgets.append(prn_check)
+                name_text = med["name"] + (" (wt-based)" if med.get("requires_weight") else "")
+                name_label = ttk.Label(body, text=name_text)
+                name_label.grid(row=r, column=1, sticky="w", padx=2, pady=1)
+                widgets.append(name_label)
 
-            prn_reason_combo.grid(row=r, column=6, sticky="w", padx=2, pady=1)
-            widgets.append(prn_reason_combo)
+                dose_var = tk.StringVar(value=med.get("default_dose", ""))
+                dose_entry = ttk.Entry(body, textvariable=dose_var, width=10)
+                dose_entry.grid(row=r, column=2, sticky="w", padx=2, pady=1)
+                widgets.append(dose_entry)
 
-            self.med_rows.append(MedRow(
-                med, var, dose_var, route_var, freq_var, prn_var, prn_reason_var, prn_check, prn_reason_combo, widgets,
-            ))
+                route_var = tk.StringVar(value=med.get("default_route", ""))
+                route_combo = ttk.Combobox(body, textvariable=route_var, values=data.COMMON_ROUTES, width=7)
+                route_combo.grid(row=r, column=3, sticky="w", padx=2, pady=1)
+                widgets.append(route_combo)
+
+                freq_var = tk.StringVar(value=med.get("default_frequency", ""))
+                freq_combo = ttk.Combobox(body, textvariable=freq_var, values=data.COMMON_FREQUENCIES, width=9)
+                freq_combo.grid(row=r, column=4, sticky="w", padx=2, pady=1)
+                widgets.append(freq_combo)
+
+                prn_var = tk.BooleanVar(value=False)
+                prn_reason_var = tk.StringVar(value=med.get("default_prn_reason", ""))
+                prn_reason_combo = ttk.Combobox(
+                    body, textvariable=prn_reason_var, values=data.PRN_REASONS, width=18, state="disabled",
+                )
+
+                def on_prn_toggle(prn_var=prn_var, combo=prn_reason_combo):
+                    combo.configure(state="normal" if prn_var.get() else "disabled")
+
+                prn_check = ttk.Checkbutton(body, variable=prn_var, command=on_prn_toggle)
+                prn_check.grid(row=r, column=5, sticky="w", padx=2, pady=1)
+                if not med.get("allow_prn"):
+                    prn_check.configure(state="disabled")
+                widgets.append(prn_check)
+
+                prn_reason_combo.grid(row=r, column=6, sticky="w", padx=2, pady=1)
+                widgets.append(prn_reason_combo)
+
+                self.med_rows.append(MedRow(
+                    med, var, dose_var, route_var, freq_var, prn_var, prn_reason_var, prn_check, prn_reason_combo, widgets,
+                ))
+                r += 1
 
         self.med_row_by_name = {row.med["name"]: row for row in self.med_rows}
 
@@ -574,14 +586,38 @@ class EDOrderApp(tk.Tk):
         preset_frame.grid(row=0, column=0, sticky="w", padx=10, pady=10)
         cols = 2
         self.other_cell_by_name = {}
-        for i, item in enumerate(data.OTHER_ORDERS):
-            r, c = divmod(i, cols)
-            cell = ttk.Frame(preset_frame)
-            cell.grid(row=r, column=c, sticky="w", padx=10, pady=4)
-            var = tk.BooleanVar(value=False)
-            ttk.Checkbutton(cell, text=item, variable=var, width=32).pack(side="left")
-            self.other_vars.append((item, var))
-            self.other_cell_by_name[item] = cell
+        self.ekg_indication_var = tk.StringVar(value="")
+        self.ekg_indication_combo = None
+        row = 0
+        for label, items in _grouped(data.OTHER_ORDERS, OTHER_CATEGORIES):
+            ttk.Label(preset_frame, text=label, font=("TkDefaultFont", 9, "bold", "italic")).grid(
+                row=row, column=0, columnspan=cols, sticky="w", padx=10, pady=(10, 2)
+            )
+            start_row = row + 1
+            for i, item in enumerate(items):
+                r, c = divmod(i, cols)
+                cell = ttk.Frame(preset_frame)
+                cell.grid(row=start_row + r, column=c, sticky="w", padx=10, pady=4)
+                var = tk.BooleanVar(value=False)
+                cb_width = 12 if item == "EKG" else 32
+                checkbutton = ttk.Checkbutton(cell, text=item, variable=var, width=cb_width)
+                checkbutton.pack(side="left")
+                if item == "EKG":
+                    ttk.Label(cell, text="Indication").pack(side="left", padx=(8, 2))
+                    combo = ttk.Combobox(
+                        cell, textvariable=self.ekg_indication_var,
+                        values=data.EKG_INDICATIONS, width=22, state="disabled",
+                    )
+                    combo.pack(side="left")
+                    self.ekg_indication_combo = combo
+
+                    def on_ekg_toggle(var=var, combo=combo):
+                        combo.configure(state="normal" if var.get() else "disabled")
+
+                    checkbutton.configure(command=on_ekg_toggle)
+                self.other_vars.append((item, var))
+                self.other_cell_by_name[item] = cell
+            row = start_row + divmod(len(items) - 1, cols)[0] + 1
 
         self.other_var_by_name = {name: var for name, var in self.other_vars}
 
@@ -751,6 +787,12 @@ class EDOrderApp(tk.Tk):
             if var is not None:
                 var.set(True)
                 applied.append(name)
+                if name == "EKG" and self.ekg_indication_combo is not None:
+                    self.ekg_indication_combo.configure(state="normal")
+
+        ekg_indication = order_set.get("ekg_indication")
+        if ekg_indication:
+            self.ekg_indication_var.set(ekg_indication)
 
         return applied
 
@@ -859,6 +901,13 @@ class EDOrderApp(tk.Tk):
             else:
                 row.prn_reason_combo.configure(state="normal" if row.prn_var.get() else "disabled")
 
+        if self.ekg_indication_combo is not None:
+            ekg_var = self.other_var_by_name.get("EKG")
+            ekg_allowed = ekg_var is not None and (not locked or "EKG" in allowed_other)
+            self.ekg_indication_combo.configure(
+                state="normal" if (ekg_allowed and ekg_var.get()) else "disabled"
+            )
+
     def _clear_selection_state(self):
         """Unchecks/clears everything without touching lock state -- the
         data-only half of _clear_all_orders, reused by _apply_aop so it can
@@ -873,6 +922,9 @@ class EDOrderApp(tk.Tk):
             row.var.set(False)
         for _, var in self.other_vars:
             var.set(False)
+        self.ekg_indication_var.set("")
+        if self.ekg_indication_combo is not None:
+            self.ekg_indication_combo.configure(state="disabled")
         self._clear_imaging_studies()
         self.custom_orders.clear()
         self.custom_listbox.delete(0, "end")
@@ -902,12 +954,8 @@ class EDOrderApp(tk.Tk):
             foreground="#555555",
         ).pack(side="left", padx=(0, 20))
 
-        ttk.Button(bar, text="Print Calibration...", command=self._open_calibration).pack(side="right", padx=4)
         ttk.Button(bar, text="Print Order Sheet", command=self._print_order_sheet).pack(side="right", padx=4)
         ttk.Button(bar, text="Preview on Screen...", command=self._preview_order_sheet).pack(side="right", padx=4)
-
-    def _open_calibration(self):
-        CalibrationDialog(self)
 
     def _collect_orders(self):
         """Returns a list of {"text": str, "requires_weight": bool, "group":
@@ -983,7 +1031,12 @@ class EDOrderApp(tk.Tk):
 
         for name, var in self.other_vars:
             if var.get():
-                orders.append({"text": name, "requires_weight": False, "group": "other"})
+                text = name
+                if name == "EKG":
+                    indication = self.ekg_indication_var.get().strip()
+                    if indication:
+                        text += " - Indication: {}".format(indication)
+                orders.append({"text": text, "requires_weight": False, "group": "other"})
 
         for text in self.custom_orders:
             orders.append({"text": text, "requires_weight": False, "group": "custom"})
@@ -998,19 +1051,10 @@ class EDOrderApp(tk.Tk):
         return orders
 
     def _gather_and_validate(self):
-        """Returns a dict of patient/order info, or None if the user should
+        """Returns a dict of order info, or None if the user should
         not proceed (validation failed or they cancelled a confirmation)."""
-        patient_name = self.patient_name_var.get().strip()
-        csn = self.csn_var.get().strip()
         physician = self.physician_var.get().strip()
         nurse_name = self.nurse_name_var.get().strip()
-
-        if not patient_name or not csn:
-            if not messagebox.askyesno(
-                "Missing patient info",
-                "Patient Name and/or CSN is blank. Continue anyway?",
-            ):
-                return None
 
         if self.active_aop:
             if not nurse_name:
@@ -1038,14 +1082,12 @@ class EDOrderApp(tk.Tk):
             return None
 
         return {
-            "patient_name": patient_name,
-            "csn": csn,
             "physician": physician,
             "nurse_name": nurse_name if self.active_aop else None,
             "orders": orders,
         }
 
-    def _build_temp_pdf(self, include_background):
+    def _build_temp_pdf(self):
         """Generates a PDF to a private temp file and returns its path, or
         None if validation failed or generation errored (temp file, if any,
         is discarded immediately in that case)."""
@@ -1057,13 +1099,10 @@ class EDOrderApp(tk.Tk):
         try:
             pdf_gen.generate_pdf(
                 path,
-                patient_name=info["patient_name"],
-                csn=info["csn"],
                 physician_name=info["physician"],
                 orders=info["orders"],
                 order_date_str=self.order_date_var.get().strip(),
                 order_time_str=self.order_time_var.get().strip(),
-                include_background=include_background,
                 nurse_name=info["nurse_name"],
             )
         except Exception as exc:  # noqa: BLE001
@@ -1073,7 +1112,7 @@ class EDOrderApp(tk.Tk):
         return path
 
     def _print_order_sheet(self):
-        path = self._build_temp_pdf(include_background=False)
+        path = self._build_temp_pdf()
         if not path:
             return
 
@@ -1093,7 +1132,7 @@ class EDOrderApp(tk.Tk):
             )
 
     def _preview_order_sheet(self):
-        path = self._build_temp_pdf(include_background=True)
+        path = self._build_temp_pdf()
         if not path:
             return
         printing.open_in_viewer(path)

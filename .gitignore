@@ -6,6 +6,7 @@ dist/
 *.spec
 .idea/
 *.pdf
+!assets/physician_orders.pdf
 data.json
 *.xlsx
 dist_windows/

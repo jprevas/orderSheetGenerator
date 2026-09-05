@@ -1,19 +1,21 @@
 """
 Coordinate geometry for the Anne Arundel Medical Center "Physician Orders"
-paper form, plus user-adjustable print calibration.
+paper form.
 
 All base coordinates below were measured directly from a high-resolution
 photo of the blank form (pixel-located table borders, converted to points
 on a standard 8.5x11in / 612x792pt page) and verified by overlaying a
-generated grid back onto the form image. They should line up closely out
-of the box, but every printer/copier feeds paper with a slightly different
-edge margin, so a small CALIBRATION offset is applied on top and is
-adjustable from the app (Settings -> Print Calibration) without touching
-this file.
-"""
+generated grid back onto the form image. DEFAULT_CALIBRATION is a small
+fine-tuning adjustment on top of that, measured once against this app's
+baked-in form template (assets/physician_orders.pdf) -- since that template
+is now always what's printed on (see pdf_gen.py), rather than a physical
+pre-printed form whose feed margin varies by printer, this offset doesn't
+need to vary either.
 
-import json
-import os
+There is no patient name/CSN block -- a patient ID sticker is applied to
+the printed sheet afterward, in the same "PATIENT ID LABEL" box the paper
+form already has for that purpose.
+"""
 
 PAGE_WIDTH = 612.0   # 8.5in
 PAGE_HEIGHT = 792.0  # 11in
@@ -31,14 +33,6 @@ DATA_TOP = 629.65    # top edge of the first order row
 ROW_HEIGHT = 23.45    # height of each order row
 NUM_ROWS = 21         # number of order rows printed on the form
 
-# Patient name / CSN block, printed in the blank box on the upper right
-# of the form -- the same box labeled "PATIENT ID LABEL" (where a printed
-# patient sticker would normally be affixed), just right of the vertical
-# divider line and above that caption text.
-PATIENT_BLOCK_X = 314.0
-PATIENT_NAME_Y = 730.0
-PATIENT_CSN_Y = 712.0
-
 # Text inset from column edges/row bottom, so characters don't sit on the
 # printed grid lines.
 CELL_TEXT_PAD_X = 4.0
@@ -53,47 +47,24 @@ FONT_NAME = "Helvetica"
 FONT_NAME_BOLD = "Helvetica-Bold"
 ORDER_FONT_SIZE = 9
 DATE_TIME_FONT_SIZE = 9
-PATIENT_FONT_SIZE = 11
-
-CALIBRATION_PATH = os.path.join(os.path.expanduser("~"), ".ed_order_sheet_calibration.json")
 
 DEFAULT_CALIBRATION = {
-    "offset_x": 0.0,   # points; positive shifts everything RIGHT
-    "offset_y": 0.0,   # points; positive shifts everything UP
-    "row_scale": 1.0,  # multiplier on ROW_HEIGHT, for fine vertical stretch
+    "offset_x": 10.0,   # points; positive shifts everything RIGHT
+    "offset_y": 0.0,    # points; positive shifts everything UP
+    "row_scale": 1.03,  # multiplier on ROW_HEIGHT, for fine vertical stretch
 }
 
 
-def load_calibration():
-    if os.path.exists(CALIBRATION_PATH):
-        try:
-            with open(CALIBRATION_PATH, "r") as f:
-                data = json.load(f)
-            cal = dict(DEFAULT_CALIBRATION)
-            cal.update({k: v for k, v in data.items() if k in DEFAULT_CALIBRATION})
-            return cal
-        except (json.JSONDecodeError, OSError):
-            pass
-    return dict(DEFAULT_CALIBRATION)
-
-
-def save_calibration(cal):
-    clean = dict(DEFAULT_CALIBRATION)
-    clean.update({k: v for k, v in cal.items() if k in DEFAULT_CALIBRATION})
-    with open(CALIBRATION_PATH, "w") as f:
-        json.dump(clean, f, indent=2)
-
-
-def row_top(index, cal):
+def row_top(index):
     """Top y-coordinate (points from bottom) of order row `index` (0-based)."""
-    row_h = ROW_HEIGHT * cal.get("row_scale", 1.0)
-    return DATA_TOP - index * row_h + cal.get("offset_y", 0.0)
+    row_h = ROW_HEIGHT * DEFAULT_CALIBRATION["row_scale"]
+    return DATA_TOP - index * row_h + DEFAULT_CALIBRATION["offset_y"]
 
 
-def row_bottom(index, cal):
-    row_h = ROW_HEIGHT * cal.get("row_scale", 1.0)
-    return row_top(index, cal) - row_h
+def row_bottom(index):
+    row_h = ROW_HEIGHT * DEFAULT_CALIBRATION["row_scale"]
+    return row_top(index) - row_h
 
 
-def apply_x(pt, cal):
-    return pt + cal.get("offset_x", 0.0)
+def apply_x(pt):
+    return pt + DEFAULT_CALIBRATION["offset_x"]

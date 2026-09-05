@@ -27,20 +27,23 @@ from tkinter import ttk, messagebox, filedialog, simpledialog
 import data  # only for the DEFAULT_* constants / schema -- no other coupling
 
 SCHEMA_KEYS = [
-    "labs", "medications", "common_routes", "common_frequencies", "prn_reasons",
-    "titrate_frequencies", "drips", "imaging_modalities", "contrast_modalities",
-    "sided_studies", "other_orders", "order_sets",
+    "providers", "labs", "medications", "common_routes", "common_frequencies",
+    "prn_reasons", "titrate_frequencies", "ekg_indications", "drips",
+    "imaging_modalities", "contrast_modalities", "sided_studies",
+    "other_orders", "order_sets",
 ]
 
 
 def default_data():
     return {
+        "providers": copy.deepcopy(data.DEFAULT_PROVIDERS),
         "labs": copy.deepcopy(data.DEFAULT_LABS),
         "medications": copy.deepcopy(data.DEFAULT_MEDICATIONS),
         "common_routes": copy.deepcopy(data.DEFAULT_COMMON_ROUTES),
         "common_frequencies": copy.deepcopy(data.DEFAULT_COMMON_FREQUENCIES),
         "prn_reasons": copy.deepcopy(data.DEFAULT_PRN_REASONS),
         "titrate_frequencies": copy.deepcopy(data.DEFAULT_TITRATE_FREQUENCIES),
+        "ekg_indications": copy.deepcopy(data.DEFAULT_EKG_INDICATIONS),
         "drips": copy.deepcopy(data.DEFAULT_DRIPS),
         "imaging_modalities": copy.deepcopy(data.DEFAULT_IMAGING_MODALITIES),
         "contrast_modalities": copy.deepcopy(data.DEFAULT_CONTRAST_MODALITIES),
@@ -485,10 +488,12 @@ class DataEditorApp(tk.Tk):
             text="Options offered in various dropdowns throughout the main app.",
         ).grid(row=0, column=0, columnspan=4, sticky="w", padx=10, pady=(10, 4))
         specs = [
+            ("providers", "Providers (Physician Name field)"),
             ("common_routes", "Routes (Medications tab)"),
             ("common_frequencies", "Frequencies (Medications tab)"),
             ("prn_reasons", "PRN Reasons (Medications tab)"),
             ("titrate_frequencies", "Titrate Frequencies (Drips tab)"),
+            ("ekg_indications", "EKG Indications (Other Orders tab)"),
             ("sided_studies", "Sided Studies (Imaging tab -- offers Left/Right/Bilateral;\nmatched by name across all modalities)"),
         ]
         for col, (key, label) in enumerate(specs):

@@ -1,5 +1,6 @@
 reportlab>=4.0
 pillow>=10.0
+pypdf>=5.0
 
 # Windows-only: drive the native Print dialog directly (windows_print.py).
 # Skipped automatically on macOS/Linux -- those fall back to opening the
